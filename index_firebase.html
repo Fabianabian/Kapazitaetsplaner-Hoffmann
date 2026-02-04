@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kapazitätsplaner V3 - Firebase</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .group:hover .group-hover\:opacity-100 { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // FIREBASE CONFIG - ERSETZE DIES MIT DEINER EIGENEN CONFIG!
+    const firebaseConfig = {
+      apiKey: "DEINE_API_KEY",
+      authDomain: "DEIN_PROJECT.firebaseapp.com",
+      projectId: "DEIN_PROJECT_ID",
+      storageBucket: "DEIN_PROJECT.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef"
+    };
+
+    // Firebase initialisieren
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+
+    // Storage-Wrapper für Firebase (kompatibel mit alter window.storage API)
+    window.storage = {
+      async get(key) {
+        try {
+          const doc = await db.collection('data').doc(key).get();
+          if (doc.exists) {
+            return { key, value: doc.data().value };
+          }
+          return null;
+        } catch (e) {
+          console.error('Firebase get error:', e);
+          return null;
+        }
+      },
+      async set(key, value) {
+        try {
+          await db.collection('data').doc(key).set({ value, updated: new Date() });
+          return { key, value };
+        } catch (e) {
+          console.error('Firebase set error:', e);
+          return null;
+        }
+      }
+    };
+
+    // Lucide React Icons als inline SVG
+    const Calendar = ({className, ...props}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+    );
+    const Users = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    );
+    const LogOut = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+    );
+    const Settings = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    );
+    const Plus = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+    );
+    const Trash2 = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+    );
+    const GripVertical = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+    );
+    const ChevronLeft = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6"/></svg>
+    );
+    const ChevronRight = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6"/></svg>
+    );
+    const StickyNote = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/></svg>
+    );
+    const BarChart3 = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+    );
+    const ChevronDown = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m6 9 6 6 6-6"/></svg>
+    );
+    const ChevronUp = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m18 15-6-6-6 6"/></svg>
+    );
+    const Umbrella = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 12a10.06 10.06 1 0 0-20 0Z"/><path d="M12 12v8a2 2 0 0 0 4 0"/><path d="M12 2v1"/></svg>
+    );
+    const Eye = ({className}) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+    );
+
+const CapacityPlanner = () => {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [vacations, setVacations] = useState([]);
+  const [currentWeek, setCurrentWeek] = useState(() => {
+    const now = new Date();
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  });
+  const [currentYear] = useState(new Date().getFullYear());
+  const [showLogin, setShowLogin] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [draggedProject, setDraggedProject] = useState(null);
+  const [draggedTask, setDraggedTask] = useState(null);
+  const [resizingTask, setResizingTask] = useState(null);
+  const [fontSize, setFontSize] = useState(12);
+  const [expandedNotes, setExpandedNotes] = useState({});
+  const [expandedMembers, setExpandedMembers] = useState({});
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [detailViewUser, setDetailViewUser] = useState(null);
+
+  const WEEKS_TO_SHOW = 4;
+  const DW = 80, HH = 40;
+  const GRID_START = 6;               // Gantt zeigt ab 6:00 …
+  const GRID_END   = 20;              // … bis 20:00
+  const GRID_ROWS  = GRID_END - GRID_START; // 14 Zeilen
+  const DEFAULT_SCHEDULE = {1:{start:8,end:17,break:1},2:{start:8,end:17,break:1},3:{start:8,end:17,break:1},4:{start:8,end:17,break:1},5:{start:8,end:17,break:1}};
+
+  // 8.5  →  "08:30"   |   "08:30"  →  8.5
+  const h2t = (h) => { const hh=Math.floor(h), mm=Math.round((h-hh)*60); return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; };
+  const t2h = (s) => { const [h,m]=s.split(':').map(Number); return h+m/60; };
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const u = await window.storage.get('users').catch(() => null);
+        const du = [
+          { id: 'admin', name: 'Admin', role: 'admin', teamId: null, teamRole: null },
+          { id: 'p1', name: 'Person 1', role: 'member', teamId: 'team1', teamRole: 'lead', weeklyCapacity: 40 },
+          { id: 'p2', name: 'Person 2', role: 'member', teamId: 'team1', teamRole: 'responsible', weeklyCapacity: 40 },
+          { id: 'p3', name: 'Person 3', role: 'member', teamId: 'team1', teamRole: 'editor', weeklyCapacity: 40 },
+          { id: 'p4', name: 'Person 4', role: 'member', teamId: 'team2', teamRole: 'department_head', weeklyCapacity: 40 },
+          { id: 'p5', name: 'Person 5', role: 'member', teamId: 'team2', teamRole: 'editor', weeklyCapacity: 40 }
+        ];
+        setUsers(u ? JSON.parse(u.value) : du);
+        if (!u) await window.storage.set('users', JSON.stringify(du));
+
+        const t = await window.storage.get('teams').catch(() => null);
+        const dt = [
+          { id: 'team1', name: 'Team 1', departmentId: 'dept1' },
+          { id: 'team2', name: 'Team 2', departmentId: 'dept1' }
+        ];
+        setTeams(t ? JSON.parse(t.value) : dt);
+        if (!t) await window.storage.set('teams', JSON.stringify(dt));
+
+        const d = await window.storage.get('departments').catch(() => null);
+        const dd = [{ id: 'dept1', name: 'Bereich 1' }];
+        setDepartments(d ? JSON.parse(d.value) : dd);
+        if (!d) await window.storage.set('departments', JSON.stringify(dd));
+
+        const p = await window.storage.get('projects').catch(() => null);
+        const dp = [
+          { id: 'p1', name: 'Projekt A', color: '#22c55e' },
+          { id: 'p2', name: 'Projekt B', color: '#ef4444' },
+          { id: 'p3', name: 'Projekt C', color: '#3b82f6' }
+        ];
+        setProjects(p ? JSON.parse(p.value) : dp);
+        if (!p) await window.storage.set('projects', JSON.stringify(dp));
+
+        const tk = await window.storage.get('tasks').catch(() => null);
+        if (tk) setTasks(JSON.parse(tk.value));
+
+        const n = await window.storage.get('notes').catch(() => null);
+        if (n) setNotes(JSON.parse(n.value));
+
+        const v = await window.storage.get('vacations').catch(() => null);
+        if (v) setVacations(JSON.parse(v.value));
+      } catch (e) { console.error('Init error:', e); }
+    };
+    init();
+  }, []);
+
+  useEffect(() => {
+    if (currentUser && !selectedUser) setSelectedUser(currentUser);
+    if (currentUser && selectedUser && currentUser.id !== selectedUser.id && currentUser.teamRole !== 'lead') {
+      setSelectedUser(currentUser);
+    }
+  }, [currentUser]);
+
+  const getWeekDates = (w, y) => {
+    try {
+      const week = Math.max(1, Math.min(52, parseInt(w) || 1));
+      const year = parseInt(y) || 2025;
+      const s = new Date(year, 0, 1 + (week - 1) * 7);
+      const d = s.getDay();
+      const st = new Date(s);
+      if (d <= 4) st.setDate(s.getDate() - s.getDay() + 1);
+      else st.setDate(s.getDate() + 8 - s.getDay());
+      const dates = [];
+      for (let i = 0; i < 7; i++) {
+        const dt = new Date(st);
+        dt.setDate(st.getDate() + i);
+        dt.setHours(12, 0, 0, 0);
+        dates.push(dt);
+      }
+      return dates;
+    } catch (e) {
+      console.error('Date error:', e);
+      return [];
+    }
+  };
+
+  const formatDate = (d) => {
+    const dt = new Date(d);
+    dt.setHours(12, 0, 0, 0);
+    return dt.toISOString().split('T')[0];
+  };
+
+  const saveTasks = async (t) => { setTasks(t); await window.storage.set('tasks', JSON.stringify(t)); };
+  const saveProjects = async (p) => { setProjects(p); await window.storage.set('projects', JSON.stringify(p)); };
+  const saveUsers = async (u) => { setUsers(u); await window.storage.set('users', JSON.stringify(u)); };
+  const saveTeams = async (t) => { setTeams(t); await window.storage.set('teams', JSON.stringify(t)); };
+  const saveDepartments = async (d) => { setDepartments(d); await window.storage.set('departments', JSON.stringify(d)); };
+  const saveNotes = async (n) => { setNotes(n); await window.storage.set('notes', JSON.stringify(n)); };
+  const saveVacations = async (v) => { setVacations(v); await window.storage.set('vacations', JSON.stringify(v)); };
+
+  const toggleVacation = (userId, date) => {
+    const dateStr = formatDate(date);
+    const existing = vacations.find(v => v.userId === userId && v.date === dateStr);
+    if (existing) {
+      saveVacations(vacations.filter(v => !(v.userId === userId && v.date === dateStr)));
+    } else {
+      saveVacations([...vacations, {id: 'v' + Date.now(), userId, date: dateStr}]);
+    }
+  };
+
+  const isVacation = (userId, date) => {
+    const dateStr = formatDate(date);
+    return vacations.some(v => v.userId === userId && v.date === dateStr);
+  };
+
+  const addTask = (uid, pid, date, sh, eh) => {
+    const td = new Date(date);
+    td.setHours(12, 0, 0, 0);
+    saveTasks([...tasks, {
+      id: 't' + Date.now(), userId: uid, projectId: pid,
+      startDate: formatDate(td), endDate: formatDate(td),
+      startHour: sh, endHour: eh
+    }]);
+  };
+
+  const updateTask = (id, upd) => saveTasks(tasks.map(t => t.id === id ? { ...t, ...upd } : t));
+  const deleteTask = (id) => saveTasks(tasks.filter(t => t.id !== id));
+
+  const getWeekNote = (userId, weekNum) => {
+    return notes.find(n => n.userId === userId && n.week === weekNum && n.year === currentYear);
+  };
+
+  const updateWeekNote = (userId, weekNum, text) => {
+    const existing = notes.find(n => n.userId === userId && n.week === weekNum && n.year === currentYear);
+    if (existing) {
+      saveNotes(notes.map(n => n.userId === userId && n.week === weekNum && n.year === currentYear ? {...n, text} : n));
+    } else {
+      saveNotes([...notes, {id: 'n' + Date.now(), userId, week: weekNum, year: currentYear, text}]);
+    }
+  };
+
+  const getTeamMembers = (teamId) => users.filter(u => u.teamId === teamId && u.role !== 'admin');
+
+  // Arbeitsplan eines Users für einen konkreten Tag
+  const getDaySchedule = (user, date) => {
+    const dow = date.getDay();
+    if (dow === 0 || dow === 6) return {start:0, end:0, break:0};
+    return (user.dailySchedule || DEFAULT_SCHEDULE)[dow] || {start:8, end:17, break:1};
+  };
+  // Arbeitsstunden an einem Tag (= end − start − pause, oder 0 wenn frei)
+  const getDailyHours = (user, date) => {
+    const s = getDaySchedule(user, date);
+    const gross = s.end > s.start ? s.end - s.start : 0;
+    const breakTime = s.break || 0;
+    return Math.max(0, gross - breakTime);
+  };
+  const isNonWorkingDay = (user, date) => getDailyHours(user, date) === 0;
+  // Prüft ob eine bestimmte Stunde (z.B. 9 = 9:00–10:00) innerhalb des Arbeitsplans liegt
+  const isWorkingHour = (user, date, hour) => {
+    const s = getDaySchedule(user, date);
+    return hour >= s.start && hour < s.end;
+  };
+  // Wochenkapazität eines Users (Urlaub-Tage werden abgezogen)
+  const getWeekCapacity = (user, weekDates) => {
+    return weekDates.reduce((sum, d) => {
+      if (isVacation(user.id, d)) return sum;
+      return sum + getDailyHours(user, d);
+    }, 0);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (draggedTask) {
+        const dx = e.clientX - draggedTask.startX;
+        const dy = e.clientY - draggedTask.startY;
+        const daysMoved = Math.round(dx / DW);
+        const hoursMoved = Math.round(dy / HH);
+        const st = new Date(draggedTask.task.startDate);
+        const newSt = new Date(st);
+        newSt.setDate(st.getDate() + daysMoved);
+        const ed = new Date(draggedTask.task.endDate);
+        const newEd = new Date(ed);
+        newEd.setDate(ed.getDate() + daysMoved);
+        const newSh = Math.max(GRID_START, Math.min(GRID_END - 1, draggedTask.task.startHour - hoursMoved));
+        const newEh = Math.max(GRID_START + 1, Math.min(GRID_END, draggedTask.task.endHour - hoursMoved));
+        setDraggedTask({ ...draggedTask, previewStartDate: formatDate(newSt), previewEndDate: formatDate(newEd), previewStartHour: newSh, previewEndHour: newEh });
+      }
+      if (resizingTask) {
+        if (resizingTask.dir === 'right') {
+          const dx = e.clientX - resizingTask.startX;
+          const daysMoved = Math.round(dx / DW);
+          const ed = new Date(resizingTask.task.endDate);
+          const newEd = new Date(ed);
+          newEd.setDate(ed.getDate() + daysMoved);
+          setResizingTask({ ...resizingTask, previewEndDate: formatDate(newEd) });
+        } else if (resizingTask.dir === 'top') {
+          const dy = e.clientY - resizingTask.startY;
+          const hoursMoved = Math.round(dy / HH);
+          const newEh = Math.max(resizingTask.task.startHour + 1, Math.min(GRID_END, resizingTask.origEnd - hoursMoved));
+          setResizingTask({ ...resizingTask, previewEndHour: newEh });
+        } else if (resizingTask.dir === 'bottom') {
+          const dy = e.clientY - resizingTask.startY;
+          const hoursMoved = Math.round(dy / HH);
+          const newSh = Math.max(GRID_START, Math.min(resizingTask.task.endHour - 1, resizingTask.origStart - hoursMoved));
+          setResizingTask({ ...resizingTask, previewStartHour: newSh });
+        }
+      }
+    };
+    const handleMouseUp = () => {
+      if (draggedTask && draggedTask.previewStartDate) {
+        updateTask(draggedTask.task.id, {
+          startDate: draggedTask.previewStartDate, endDate: draggedTask.previewEndDate,
+          startHour: draggedTask.previewStartHour, endHour: draggedTask.previewEndHour
+        });
+      }
+      if (resizingTask) {
+        const upd = {};
+        if (resizingTask.previewEndDate) upd.endDate = resizingTask.previewEndDate;
+        if (resizingTask.previewEndHour !== undefined) upd.endHour = resizingTask.previewEndHour;
+        if (resizingTask.previewStartHour !== undefined) upd.startHour = resizingTask.previewStartHour;
+        if (Object.keys(upd).length > 0) updateTask(resizingTask.task.id, upd);
+      }
+      setDraggedTask(null);
+      setResizingTask(null);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggedTask, resizingTask, tasks]);
+
+  const AdminPanel = () => {
+    const [localUsers, setLocalUsers] = React.useState(users);
+    const [localTeams, setLocalTeams] = React.useState(teams);
+    const [localDepartments, setLocalDepartments] = React.useState(departments);
+    React.useEffect(() => { setLocalUsers(users); }, [users]);
+    React.useEffect(() => { setLocalTeams(teams); }, [teams]);
+    React.useEffect(() => { setLocalDepartments(departments); }, [departments]);
+    
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-3xl p-6 max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="flex justify-between mb-6">
+            <h2 className="text-2xl font-bold">Admin Panel</h2>
+            <button onClick={() => setShowAdmin(false)} className="text-2xl">✕</button>
+          </div>
+          <div className="grid grid-cols-3 gap-6">
+            <div>
+              <h3 className="font-bold mb-3">Benutzer</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {localUsers.filter(u => u.role !== 'admin').map(u => (
+                  <div key={u.id} className="p-3 bg-gray-50 rounded-xl">
+                    <input type="text" value={u.name} 
+                      onChange={(e) => setLocalUsers(localUsers.map(x => x.id === u.id ? {...x, name: e.target.value} : x))} 
+                      onBlur={() => saveUsers(localUsers)}
+                      className="w-full p-2 border rounded mb-2" />
+                    <select value={u.teamId || ''} 
+                      onChange={(e) => { const newUsers = localUsers.map(x => x.id === u.id ? {...x, teamId: e.target.value} : x); setLocalUsers(newUsers); saveUsers(newUsers); }} 
+                      className="w-full p-2 border rounded mb-2">
+                      <option value="">Kein Team</option>
+                      {localTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                    <select value={u.teamRole || 'editor'} 
+                      onChange={(e) => { const newUsers = localUsers.map(x => x.id === u.id ? {...x, teamRole: e.target.value} : x); setLocalUsers(newUsers); saveUsers(newUsers); }} 
+                      className="w-full p-2 border rounded">
+                      <option value="entrepreneur">Unternehmer</option>
+                      <option value="department_head">Bereichsleitung</option>
+                      <option value="lead">Führungskraft</option>
+                      <option value="responsible">Verantwortlicher</option>
+                      <option value="editor">Bearbeiter</option>
+                    </select>
+                    {/* Arbeitszeiten Mo–Fr */}
+                    <div className="mt-2 p-2 bg-white rounded border">
+                      <div className="text-xs font-semibold text-gray-500 mb-1.5">Arbeitszeiten</div>
+                      <div className="space-y-1.5">
+                        {[{d:1,l:'Mo'},{d:2,l:'Di'},{d:3,l:'Mi'},{d:4,l:'Do'},{d:5,l:'Fr'}].map(({d,l}) => {
+                          const sched = u.dailySchedule || DEFAULT_SCHEDULE;
+                          const dayS = sched[d] || {start:8, end:17};
+                          const isOff = dayS.start >= dayS.end || (dayS.start === 0 && dayS.end === 0);
+                          const toggleOff = () => {
+                            const newSched = {...sched, [d]: isOff ? {start:8,end:17,break:1} : {start:0,end:0,break:0}};
+                            const nu = localUsers.map(x => x.id === u.id ? {...x, dailySchedule: newSched} : x);
+                            setLocalUsers(nu); saveUsers(nu);
+                          };
+                          const setVal = (field, raw) => {
+                            const val = field === 'break' ? parseFloat(raw) || 0 : t2h(raw);
+                            const newSched = {...sched, [d]: {...dayS, [field]: val}};
+                            const nu = localUsers.map(x => x.id === u.id ? {...x, dailySchedule: newSched} : x);
+                            setLocalUsers(nu); saveUsers(nu);
+                          };
+                          const breakTime = dayS.break || 0;
+                          const netHours = Math.max(0, (dayS.end - dayS.start) - breakTime);
+                          return (
+                            <div key={d} className="flex items-center gap-1.5">
+                              <span className="text-xs w-5 font-semibold text-gray-600">{l}</span>
+                              {isOff ? (
+                                <span className="text-xs text-red-500 italic flex-1">frei</span>
+                              ) : (
+                                <>
+                                  <input type="time" value={h2t(dayS.start)} onChange={(e) => setVal('start', e.target.value)}
+                                    className="text-xs border rounded px-1 py-0.5 flex-1" style={{minWidth:0}} />
+                                  <span className="text-xs text-gray-400">–</span>
+                                  <input type="time" value={h2t(dayS.end)} onChange={(e) => setVal('end', e.target.value)}
+                                    className="text-xs border rounded px-1 py-0.5 flex-1" style={{minWidth:0}} />
+                                  <span className="text-xs text-gray-400 mx-0.5">−</span>
+                                  <input type="number" min="0" max="2" step="0.25" value={breakTime}
+                                    onChange={(e) => setVal('break', e.target.value)}
+                                    className="text-xs border rounded px-1 py-0.5 w-12 text-center" 
+                                    title="Pause (Std)" />
+                                  <span className="text-xs text-gray-500 w-8 text-right">{netHours.toFixed(1)}h</span>
+                                </>
+                              )}
+                              <button onClick={toggleOff}
+                                className={`text-xs px-1.5 py-0.5 rounded ml-auto ${isOff ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                {isOff ? 'An' : 'Aus'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1.5 text-right border-t pt-1">
+                        Σ {[1,2,3,4,5].reduce((s,d) => { const ds=(u.dailySchedule||DEFAULT_SCHEDULE)[d]||{start:8,end:17,break:1}; const gross=ds.end>ds.start?ds.end-ds.start:0; const brk=ds.break||0; return s+Math.max(0,gross-brk); }, 0).toFixed(1)}h/Woche
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={() => {
+                  const newUser = { id: 'p' + Date.now(), name: 'Neue Person', role: 'member', teamId: localTeams[0]?.id || null, teamRole: 'editor', dailySchedule: {1:{start:8,end:17,break:1},2:{start:8,end:17,break:1},3:{start:8,end:17,break:1},4:{start:8,end:17,break:1},5:{start:8,end:17,break:1}} };
+                  const newUsers = [...localUsers, newUser];
+                  setLocalUsers(newUsers); saveUsers(newUsers);
+                }} className="w-full p-3 bg-indigo-600 text-white rounded-xl">
+                  <Plus className="w-4 h-4 inline mr-2" /> Person hinzufügen
+                </button>
+              </div>
+            </div>
+            <div>
+              <h3 className="font-bold mb-3">Teams</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {localTeams.map(t => (
+                  <div key={t.id} className="p-3 bg-gray-50 rounded-xl">
+                    <input type="text" value={t.name} 
+                      onChange={(e) => setLocalTeams(localTeams.map(x => x.id === t.id ? {...x, name: e.target.value} : x))} 
+                      onBlur={() => saveTeams(localTeams)}
+                      className="w-full p-2 border rounded mb-2" />
+                    <select value={t.departmentId || ''} 
+                      onChange={(e) => { const newTeams = localTeams.map(x => x.id === t.id ? {...x, departmentId: e.target.value} : x); setLocalTeams(newTeams); saveTeams(newTeams); }} 
+                      className="w-full p-2 border rounded">
+                      <option value="">Kein Bereich</option>
+                      {localDepartments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <button onClick={() => {
+                  const newTeam = { id: 'team' + Date.now(), name: 'Neues Team', departmentId: localDepartments[0]?.id || null };
+                  const newTeams = [...localTeams, newTeam];
+                  setLocalTeams(newTeams); saveTeams(newTeams);
+                }} className="w-full p-3 bg-indigo-600 text-white rounded-xl">
+                  <Plus className="w-4 h-4 inline mr-2" /> Team hinzufügen
+                </button>
+              </div>
+            </div>
+            <div>
+              <h3 className="font-bold mb-3">Bereiche</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {localDepartments.map(d => (
+                  <div key={d.id} className="p-3 bg-gray-50 rounded-xl">
+                    <input type="text" value={d.name} 
+                      onChange={(e) => setLocalDepartments(localDepartments.map(x => x.id === d.id ? {...x, name: e.target.value} : x))} 
+                      onBlur={() => saveDepartments(localDepartments)}
+                      className="w-full p-2 border rounded" />
+                  </div>
+                ))}
+                <button onClick={() => {
+                  const newDept = { id: 'dept' + Date.now(), name: 'Neuer Bereich' };
+                  const newDepts = [...localDepartments, newDept];
+                  setLocalDepartments(newDepts); saveDepartments(newDepts);
+                }} className="w-full p-3 bg-indigo-600 text-white rounded-xl">
+                  <Plus className="w-4 h-4 inline mr-2" /> Bereich hinzufügen
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const TeamDashboard = () => {
+    const teamMembers = currentUser.teamRole === 'lead' 
+      ? getTeamMembers(currentUser.teamId)
+      : currentUser.teamRole === 'department_head'
+      ? teams.filter(t => {
+          const userTeam = teams.find(tm => tm.id === currentUser.teamId);
+          return userTeam && t.departmentId === userTeam.departmentId;
+        }).flatMap(t => getTeamMembers(t.id))
+      : users.filter(u => u.role !== 'admin');
+
+    const sortedProjects = [...projects].sort((a, b) => a.name.localeCompare(b.name));
+
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="bg-white rounded-3xl shadow-lg mb-6">
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 flex justify-between items-center">
+            <h2 className="text-xl font-bold text-white">Team Dashboard - {currentUser.name}</h2>
+            <button onClick={() => setShowDashboard(false)} className="px-4 py-2 bg-white/20 text-white rounded-xl hover:bg-white/30">
+              Zur Einzelansicht
+            </button>
+          </div>
+          
+          <div className="p-6">
+            <div className="mb-4 flex gap-2 items-center justify-center">
+              <button onClick={() => setCurrentWeek(w => w === 1 ? 52 : w - 1)} className="px-4 py-2 bg-indigo-600 text-white rounded-xl">
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="flex-1 text-center font-bold text-lg py-2">KW {currentWeek} - {currentWeek + WEEKS_TO_SHOW - 1}</div>
+              <button onClick={() => setCurrentWeek(w => w === 52 ? 1 : w + 1)} className="px-4 py-2 bg-indigo-600 text-white rounded-xl">
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Team Gesamtübersicht */}
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 mb-6">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <Users className="w-6 h-6" />
+                Team Gesamtübersicht ({teamMembers.length} Mitarbeiter)
+              </h3>
+              
+              <div className="grid gap-4" style={{gridTemplateColumns: `repeat(${WEEKS_TO_SHOW}, 1fr)`}}>
+                {Array.from({length: WEEKS_TO_SHOW}, (_, weekOffset) => {
+                  const weekNum = currentWeek + weekOffset;
+                  const weekDates = getWeekDates(weekNum, currentYear);
+                  
+                  let teamTotalHours = 0;
+                  let teamTotalCapacity = 0;
+                  
+                  teamMembers.forEach(member => {
+                    weekDates.forEach(d => {
+                      const ds = formatDate(d);
+                      tasks.forEach(t => {
+                        if (t.userId === member.id && ds >= t.startDate && ds <= t.endDate) {
+                          teamTotalHours += (t.endHour - t.startHour);
+                        }
+                      });
+                    });
+                    teamTotalCapacity += getWeekCapacity(member, weekDates);
+                  });
+                  
+                  const teamUtilizationPercent = teamTotalCapacity > 0 ? (teamTotalHours / teamTotalCapacity) * 100 : 0;
+                  const teamFreeCapacity = teamTotalCapacity - teamTotalHours;
+                  const isOverloaded = teamUtilizationPercent > 100;
+                  
+                  return (
+                    <div key={weekNum} className="bg-white rounded-xl p-4 shadow-md">
+                      <div className="text-center mb-3">
+                        <div className="text-lg font-bold text-gray-700">KW {weekNum}</div>
+                        <div className="text-sm text-gray-500 mt-1">
+                          {Math.round(teamTotalHours)}h / {Math.round(teamTotalCapacity)}h
+                        </div>
+                      </div>
+                      
+                      {/* Große Visualisierung */}
+                      <div className="relative h-32 bg-gray-200 rounded-lg overflow-hidden mb-3">
+                        <div 
+                          className={`absolute bottom-0 left-0 right-0 transition-all ${
+                            isOverloaded ? 'bg-red-500' : 
+                            teamUtilizationPercent > 90 ? 'bg-orange-500' : 
+                            teamUtilizationPercent > 70 ? 'bg-yellow-500' : 
+                            'bg-green-500'
+                          }`}
+                          style={{height: `${Math.min(teamUtilizationPercent, 100)}%`}}
+                        >
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center text-white font-bold">
+                              <div className="text-2xl">{Math.round(teamUtilizationPercent)}%</div>
+                              <div className="text-xs">Auslastung</div>
+                            </div>
+                          </div>
+                        </div>
+                        {teamUtilizationPercent < 100 && (
+                          <div 
+                            className="absolute top-0 left-0 right-0 bg-green-50 border-b-2 border-green-200"
+                            style={{height: `${100 - teamUtilizationPercent}%`}}
+                          >
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="text-center text-green-700 font-semibold">
+                                <div className="text-lg">{Math.round(teamFreeCapacity)}h</div>
+                                <div className="text-xs">frei</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Details */}
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Geplant:</span>
+                          <span className="font-semibold text-purple-600">{Math.round(teamTotalHours)}h</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Kapazität:</span>
+                          <span className="font-semibold text-gray-700">{Math.round(teamTotalCapacity)}h</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Verfügbar:</span>
+                          <span className="font-semibold text-green-600">{Math.round(teamFreeCapacity)}h</span>
+                        </div>
+                        <div className="flex justify-between border-t pt-1 mt-1">
+                          <span className="text-gray-600">Ø pro Person:</span>
+                          <span className="font-semibold text-indigo-600">
+                            {teamMembers.length > 0 ? Math.round(teamTotalHours / teamMembers.length) : 0}h
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {isOverloaded && (
+                        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700 font-semibold text-center">
+                          ⚠️ Überlastet!
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Gesamtstatistik über alle Wochen */}
+              <div className="mt-6 grid grid-cols-4 gap-4">
+                {(() => {
+                  let totalPlanned = 0;
+                  let totalCapacity = 0;
+                  
+                  Array.from({length: WEEKS_TO_SHOW}, (_, weekOffset) => {
+                    const weekNum = currentWeek + weekOffset;
+                    const weekDates = getWeekDates(weekNum, currentYear);
+                    
+                    teamMembers.forEach(member => {
+                      weekDates.forEach(d => {
+                        const ds = formatDate(d);
+                        tasks.forEach(t => {
+                          if (t.userId === member.id && ds >= t.startDate && ds <= t.endDate) {
+                            totalPlanned += (t.endHour - t.startHour);
+                          }
+                        });
+                      });
+                      totalCapacity += getWeekCapacity(member, weekDates);
+                    });
+                  });
+                  
+                  const totalFree = totalCapacity - totalPlanned;
+                  const avgUtilization = totalCapacity > 0 ? (totalPlanned / totalCapacity) * 100 : 0;
+                  
+                  return (
+                    <>
+                      <div className="bg-white rounded-xl p-4 shadow">
+                        <div className="text-sm text-gray-600 mb-1">Gesamt Geplant</div>
+                        <div className="text-2xl font-bold text-purple-600">{Math.round(totalPlanned)}h</div>
+                      </div>
+                      <div className="bg-white rounded-xl p-4 shadow">
+                        <div className="text-sm text-gray-600 mb-1">Gesamt Kapazität</div>
+                        <div className="text-2xl font-bold text-gray-700">{Math.round(totalCapacity)}h</div>
+                      </div>
+                      <div className="bg-white rounded-xl p-4 shadow">
+                        <div className="text-sm text-gray-600 mb-1">Gesamt Verfügbar</div>
+                        <div className="text-2xl font-bold text-green-600">{Math.round(totalFree)}h</div>
+                      </div>
+                      <div className="bg-white rounded-xl p-4 shadow">
+                        <div className="text-sm text-gray-600 mb-1">Ø Auslastung</div>
+                        <div className={`text-2xl font-bold ${
+                          avgUtilization > 100 ? 'text-red-600' : 
+                          avgUtilization > 90 ? 'text-orange-600' : 
+                          avgUtilization > 70 ? 'text-yellow-600' : 
+                          'text-green-600'
+                        }`}>
+                          {Math.round(avgUtilization)}%
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <BarChart3 className="w-6 h-6" />
+                Team Kapazitätsübersicht
+              </h3>
+              
+              <div className="bg-white rounded-xl p-4">
+                <div className="space-y-4">
+                  {teamMembers.map(member => {
+                    const isMemberExpanded = expandedMembers[member.id];
+                    return (
+                      <div key={member.id} className="border rounded-2xl overflow-hidden">
+                        <div onClick={() => setExpandedMembers({...expandedMembers, [member.id]: !isMemberExpanded})}
+                          className="bg-gray-100 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-gray-200">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{member.name}</span>
+                            <button onClick={(e) => { e.stopPropagation(); setDetailViewUser(member); }}
+                              className="p-1 hover:bg-indigo-100 rounded transition-colors" title="Detailansicht">
+                              <Eye className="w-4 h-4 text-indigo-600" />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isMemberExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                          </div>
+                        </div>
+                        
+                        {isMemberExpanded && (
+                          <div className="p-4">
+                            <div className="flex gap-2 overflow-x-auto">
+                              {Array.from({length: WEEKS_TO_SHOW}, (_, weekOffset) => {
+                                const weekNum = currentWeek + weekOffset;
+                                const weekDates = getWeekDates(weekNum, currentYear);
+                                return (
+                                  <div key={weekNum} className="flex-shrink-0 border rounded-xl p-3 bg-gray-50" style={{minWidth: '200px'}}>
+                                    <div className="font-semibold mb-2 text-center">KW {weekNum}</div>
+                                    <div className="space-y-1">
+                                      {weekDates.map((d, i) => {
+                                        const ds = formatDate(d);
+                                        let tot = 0;
+                                        tasks.forEach(t => {
+                                          if (t.userId === member.id && ds >= t.startDate && ds <= t.endDate) {
+                                            tot += (t.endHour - t.startHour);
+                                          }
+                                        });
+                                        const isWe = d.getDay() === 0 || d.getDay() === 6;
+                                        const isVac = isVacation(member.id, d);
+                                        const isNonWork = isNonWorkingDay(member, d);
+                                        const dayCapacity = getDailyHours(member, d);
+                                        return (
+                                          <div key={i} className="flex justify-between items-center text-sm">
+                                            <span>{['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()]} {d.getDate()}.{d.getMonth() + 1}</span>
+                                            <span className={`px-2 py-1 rounded font-semibold ${
+                                              isVac ? 'bg-orange-400 text-white' :
+                                              isNonWork ? 'bg-gray-300 text-gray-500' :
+                                              isWe ? 'bg-gray-300' : 
+                                              tot > dayCapacity ? 'bg-red-400 text-white' : 
+                                              tot > 0 ? 'bg-green-400 text-white' : 
+                                              'bg-gray-200'
+                                            }`}>
+                                              {isVac ? '🏖️' : isNonWork ? 'frei' : tot > 0 ? `${tot}h` : ''}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {detailViewUser && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl w-full max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <Eye className="w-6 h-6 text-white" />
+                  <h2 className="text-xl font-bold text-white">Detailansicht - {detailViewUser.name}</h2>
+                </div>
+                <button onClick={() => setDetailViewUser(null)} className="text-white hover:bg-white/20 rounded-xl p-2 transition-colors">
+                  <span className="text-2xl">✕</span>
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-6">
+                <div className="flex gap-4">
+                  <div className="w-56 bg-gray-50 rounded-2xl p-4 flex-shrink-0">
+                    <h3 className="font-bold mb-3">Projekte</h3>
+                    <div className="space-y-2">
+                      {sortedProjects.map(p => (
+                        <div key={p.id} className="flex items-center gap-2 p-3 rounded-xl bg-white border-2" style={{borderColor: p.color}}>
+                          <div className="w-4 h-4 rounded" style={{backgroundColor: p.color}}></div>
+                          <span className="flex-1 text-sm">{p.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-x-auto">
+                    <div className="flex gap-4">
+                      {Array.from({length: WEEKS_TO_SHOW}, (_, i) => {
+                        const weekNum = currentWeek + i;
+                        return <WeekColumn key={weekNum} weekNum={weekNum} user={detailViewUser} />;
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const WeekColumn = ({ weekNum, user }) => {
+    const weekDates = getWeekDates(weekNum, currentYear);
+    if (weekDates.length === 0) return null;
+    const weekNote = getWeekNote(user.id, weekNum);
+    const isNoteExpanded = expandedNotes[`${user.id}-${weekNum}`] !== false;
+    const [localNoteText, setLocalNoteText] = React.useState(weekNote?.text || '');
+    React.useEffect(() => { setLocalNoteText(weekNote?.text || ''); }, [weekNote?.text]);
+
+    return (
+      <div className="flex-shrink-0" style={{width: 7 * DW + 50}}>
+        <div className="bg-gray-50 rounded-2xl p-4">
+          <h3 className="text-lg font-bold mb-3 text-center">KW {weekNum}</h3>
+          <div className="flex mb-1" style={{marginLeft: '40px'}}>
+            <div style={{display: 'grid', gridTemplateColumns: `repeat(7, ${DW}px)`, width: 7 * DW}}>
+              {weekDates.map((d, i) => {
+                const isVacationDay = isVacation(user.id, d);
+                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                const isNonWork = isNonWorkingDay(user, d);
+                return (
+                  <div key={i} className="flex justify-center">
+                    {!isWeekend && !isNonWork && (
+                      <button onClick={() => toggleVacation(user.id, d)}
+                        className={`p-1 rounded transition-all ${isVacationDay ? 'bg-orange-400 text-white hover:bg-orange-500' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                        title={isVacationDay ? 'Urlaub entfernen' : 'Urlaub markieren'}>
+                        <Umbrella className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex mb-2" style={{marginLeft: '40px'}}>
+            <div style={{display: 'grid', gridTemplateColumns: `repeat(7, ${DW}px)`, width: 7 * DW}}>
+              {weekDates.map((d, i) => {
+                const isWe = d.getDay() === 0 || d.getDay() === 6;
+                const isNonWork = isNonWorkingDay(user, d);
+                const dayS = getDaySchedule(user, d);
+                return (
+                  <div key={i} className={`text-center flex flex-col justify-center ${(isWe || isNonWork) ? 'bg-gray-300' : 'bg-white border border-gray-200'}`} style={{height: '60px'}}>
+                    <div className="text-xs font-semibold">{['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()]}</div>
+                    <div className="text-sm">{d.getDate()}.{d.getMonth() + 1}</div>
+                    {!isWe && (
+                      <div className={`text-xs mt-0.5 ${isNonWork ? 'text-gray-500 font-semibold' : 'text-gray-400'}`}>
+                        {isNonWork ? 'frei' : `${h2t(dayS.start)}–${h2t(dayS.end)}`}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex">
+            <div className="flex flex-col justify-between text-xs text-gray-500 pr-2" style={{width: '40px'}}>
+              {Array.from({length: GRID_ROWS}, (_, i) => GRID_END - 1 - i).map(h => (
+                <div key={h} className="text-right" style={{height: HH, lineHeight: `${HH}px`}}>{h}:00</div>
+              ))}
+            </div>
+            <div className="relative bg-white rounded-xl" style={{width: 7 * DW, height: GRID_ROWS * HH}}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (draggedProject) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  const day = Math.floor(x / DW);
+                  const clickedRow = Math.floor(y / HH);
+                  const hour = GRID_END - 1 - clickedRow;
+                  if (day >= 0 && day < 7 && hour >= GRID_START && hour < GRID_END) {
+                    addTask(user.id, draggedProject.id, weekDates[day], hour, Math.min(hour + 2, GRID_END));
+                  }
+                  setDraggedProject(null);
+                }
+              }}
+              onDragOver={(e) => e.preventDefault()}>
+              <div className="absolute inset-0" style={{display: 'grid', gridTemplateColumns: `repeat(7, ${DW}px)`, gridTemplateRows: `repeat(${GRID_ROWS}, ${HH}px)`}}>
+                {Array.from({length: GRID_ROWS * 7}, (_, i) => {
+                  const dayIndex  = i % 7;
+                  const rowIndex  = Math.floor(i / 7);
+                  const hourSlot  = GRID_END - 1 - rowIndex;          // Stunde dieser Zeile
+                  const dateForDay = weekDates[dayIndex];
+                  const isWe       = dateForDay?.getDay() === 0 || dateForDay?.getDay() === 6;
+                  const isVacDay   = dateForDay && isVacation(user.id, dateForDay);
+                  const isNonWork  = dateForDay && isNonWorkingDay(user, dateForDay);
+                  const isWorkH    = dateForDay && isWorkingHour(user, dateForDay, hourSlot);
+                  // Farb-Priorität: Urlaub > Wochenende/frei > außerhalb Arbeitszeit > normal
+                  let bg = '';
+                  if (isVacDay)              bg = 'bg-orange-100';
+                  else if (isWe || isNonWork) bg = 'bg-gray-200';
+                  else if (!isWorkH)         bg = 'bg-gray-100';
+                  return <div key={i} className={`border border-gray-100 ${bg}`}></div>;
+                })}
+              </div>
+              {tasks.filter(t => t.userId === user.id).map(t => {
+                const isDrag = draggedTask?.task?.id === t.id;
+                const isResize = resizingTask?.task?.id === t.id;
+                const startDate = isDrag && draggedTask.previewStartDate ? draggedTask.previewStartDate : t.startDate;
+                const endDate = isDrag && draggedTask.previewEndDate ? draggedTask.previewEndDate : isResize && resizingTask.previewEndDate ? resizingTask.previewEndDate : t.endDate;
+                const startHour = isDrag && draggedTask.previewStartHour !== undefined ? draggedTask.previewStartHour : isResize && resizingTask.previewStartHour !== undefined ? resizingTask.previewStartHour : t.startHour;
+                const endHour = isDrag && draggedTask.previewEndHour !== undefined ? draggedTask.previewEndHour : isResize && resizingTask.previewEndHour !== undefined ? resizingTask.previewEndHour : t.endHour;
+                const st = new Date(startDate + 'T12:00:00');
+                const ed = new Date(endDate + 'T12:00:00');
+                const fd = new Date(weekDates[0]);
+                fd.setHours(12, 0, 0, 0);
+                const diff = Math.round((st - fd) / 86400000);
+                if (diff < 0 || diff >= 7) return null;
+                const days = Math.round((ed - st) / 86400000) + 1;
+                const proj = projects.find(p => p.id === t.projectId);
+                const bottomPos = (startHour - GRID_START) * HH;
+                const heightVal = Math.max((endHour - startHour) * HH, HH);
+                return (
+                  <div key={t.id} onMouseDown={(e) => { e.preventDefault(); setDraggedTask({ task: t, startX: e.clientX, startY: e.clientY }); }}
+                    style={{ left: diff * DW, width: days * DW, bottom: bottomPos, height: heightVal, backgroundColor: proj?.color, opacity: 0.7 }} 
+                    className="absolute rounded-lg shadow-lg flex flex-col items-center justify-center text-white font-bold cursor-move group">
+                    <div onMouseDown={(e) => { e.stopPropagation(); setResizingTask({ task: t, dir: 'top', startX: e.clientX, startY: e.clientY, origEnd: t.endHour }); }}
+                      className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-black/20 z-10" />
+                    <div className="text-xs pointer-events-none">{proj?.name}</div>
+                    <div className="text-xs pointer-events-none opacity-80">{h2t(startHour)}–{h2t(endHour)}</div>
+                    <div className="text-xs pointer-events-none">{days * (endHour - startHour)}h</div>
+                    <div onMouseDown={(e) => { e.stopPropagation(); setResizingTask({ task: t, dir: 'right', startX: e.clientX, startY: e.clientY }); }}
+                      className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 z-10" />
+                    <div onMouseDown={(e) => { e.stopPropagation(); setResizingTask({ task: t, dir: 'bottom', startX: e.clientX, startY: e.clientY, origStart: t.startHour }); }}
+                      className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-black/20 z-10" />
+                    <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }} 
+                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 bg-red-500 rounded-lg p-1.5 z-20">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="border-t-2 mt-3 pt-3" style={{marginLeft: '40px'}}>
+            <div style={{display: 'grid', gridTemplateColumns: `repeat(7, ${DW}px)`, width: 7 * DW}}>
+              {weekDates.map((d, i) => {
+                const ds = formatDate(d);
+                let tot = 0;
+                tasks.forEach(t => { if (t.userId === user.id && ds >= t.startDate && ds <= t.endDate) tot += (t.endHour - t.startHour); });
+                const isWe = d.getDay() === 0 || d.getDay() === 6;
+                const isVac = isVacation(user.id, d);
+                const isNonWork = isNonWorkingDay(user, d);
+                const dayCapacity = getDailyHours(user, d);
+                return (
+                  <div key={i} className="text-center px-1">
+                    <div className={`py-1 rounded font-bold ${
+                      isVac ? 'bg-orange-400 text-white' : 
+                      isNonWork ? 'bg-gray-300 text-gray-500' :
+                      isWe ? 'bg-gray-300' : 
+                      tot > dayCapacity ? 'bg-red-400 text-white' : 
+                      tot > 0 ? 'bg-green-400 text-white' : 
+                      'bg-gray-200'
+                    }`}>
+                      {isVac ? '🏖️' : isNonWork ? 'frei' : tot > 0 ? `${tot}h` : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="mt-3">
+            <button onClick={() => { const key = `${user.id}-${weekNum}`; setExpandedNotes(prev => ({...prev, [key]: prev[key] === false ? true : false})); }} 
+              className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800">
+              <StickyNote className="w-4 h-4" />
+              Notizen KW {weekNum}
+            </button>
+            {isNoteExpanded && (
+              <textarea value={localNoteText} onChange={(e) => setLocalNoteText(e.target.value)}
+                onBlur={() => updateWeekNote(user.id, weekNum, localNoteText)}
+                className="w-full mt-2 p-2 border rounded" rows="3" placeholder="Notizen für diese Woche..." />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (showLogin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
+        <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full">
+          <Calendar className="w-16 h-16 mx-auto text-indigo-600 mb-4" />
+          <h1 className="text-3xl font-bold text-center mb-6">Kapazitätsplaner</h1>
+          <div className="space-y-3">
+            {users.map(u => (
+              <button key={u.id} onClick={() => { setCurrentUser(u); setShowLogin(false); setShowDashboard(u.teamRole === 'lead' || u.teamRole === 'department_head' || u.teamRole === 'entrepreneur'); }} 
+                className="w-full p-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-2xl hover:shadow-xl transition-shadow">
+                {u.name} {u.teamRole === 'lead' && '(Führungskraft)'} {u.teamRole === 'department_head' && '(Bereichsleitung)'} {u.teamRole === 'entrepreneur' && '(Unternehmer)'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showDashboard && (currentUser.teamRole === 'lead' || currentUser.teamRole === 'department_head' || currentUser.teamRole === 'entrepreneur')) {
+    return <TeamDashboard />;
+  }
+
+  const sortedProjects = [...projects].sort((a, b) => a.name.localeCompare(b.name));
+  const displayUser = selectedUser || currentUser;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50">
+      <div className="bg-white shadow-lg sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between">
+          <div className="flex items-center gap-3">
+            <Calendar className="w-6 h-6 text-indigo-600" />
+            <h1 className="text-xl font-bold">Kapazitätsplaner</h1>
+            {currentUser.teamRole === 'lead' ? (
+              <select value={selectedUser?.id || ''} onChange={(e) => { const user = users.find(u => u.id === e.target.value); if (user) setSelectedUser(user); }}
+                className="ml-4 px-4 py-2 border-2 border-indigo-600 rounded-xl font-semibold">
+                {users.filter(u => u.role !== 'admin').map(u => (<option key={u.id} value={u.id}>{u.name}</option>))}
+              </select>
+            ) : (
+              <span className="ml-4 px-4 py-2 font-semibold text-gray-600">- {displayUser?.name}</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {(currentUser.teamRole === 'lead' || currentUser.teamRole === 'department_head' || currentUser.teamRole === 'entrepreneur') && (
+              <button onClick={() => setShowDashboard(true)} className="px-4 py-2 bg-green-600 text-white rounded-2xl">
+                <BarChart3 className="w-4 h-4 inline mr-2" />Team Dashboard
+              </button>
+            )}
+            {currentUser.role === 'admin' && (<button onClick={() => setShowAdmin(true)} className="px-4 py-2 bg-purple-600 text-white rounded-2xl">Admin</button>)}
+            <button onClick={() => setShowSettings(true)} className="p-3 hover:bg-gray-100 rounded-2xl"><Settings className="w-5 h-5" /></button>
+            <button onClick={() => { setCurrentUser(null); setSelectedUser(null); setShowLogin(true); setShowDashboard(false); }} 
+              className="px-4 py-2 bg-gray-100 rounded-2xl"><LogOut className="w-4 h-4 inline mr-2" />Abmelden</button>
+          </div>
+        </div>
+      </div>
+      
+      <div className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <button onClick={() => setCurrentWeek(w => w === 1 ? 52 : w - 1)} className="px-4 py-2 bg-indigo-600 text-white rounded-2xl"><ChevronLeft className="w-5 h-5" /></button>
+          <div className="font-bold">KW {currentWeek} - {currentWeek + WEEKS_TO_SHOW - 1}</div>
+          <button onClick={() => setCurrentWeek(w => w === 52 ? 1 : w + 1)} className="px-4 py-2 bg-indigo-600 text-white rounded-2xl"><ChevronRight className="w-5 h-5" /></button>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="bg-white rounded-3xl shadow-lg">
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">Wochenansicht - {displayUser?.name}</h2>
+          </div>
+          <div className="p-4 flex gap-4">
+            <div className="w-56 bg-gray-50 rounded-2xl p-4 flex-shrink-0">
+              <h3 className="font-bold mb-3">Projekte</h3>
+              <div className="space-y-2">
+                {sortedProjects.map(p => (
+                  <div key={p.id} draggable onDragStart={() => setDraggedProject(p)} 
+                    className="flex items-center gap-2 p-3 rounded-xl cursor-move hover:shadow-lg bg-white border-2 transition-shadow" style={{borderColor: p.color}}>
+                    <GripVertical className="w-4 h-4" />
+                    <div className="w-4 h-4 rounded" style={{backgroundColor: p.color}}></div>
+                    <span className="flex-1 text-sm">{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 overflow-x-auto">
+              <div className="flex gap-4 pb-4">
+                {displayUser && Array.from({length: WEEKS_TO_SHOW}, (_, i) => {
+                  const weekNum = currentWeek + i;
+                  return <WeekColumn key={weekNum} weekNum={weekNum} user={displayUser} />;
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-2xl w-full">
+            <div className="flex justify-between mb-6">
+              <h2 className="text-2xl font-bold">Einstellungen</h2>
+              <button onClick={() => setShowSettings(false)} className="text-2xl">✕</button>
+            </div>
+            <div className="mb-6">
+              <h3 className="font-semibold mb-3">Schriftgröße: {fontSize}px</h3>
+              <input type="range" min="10" max="16" value={fontSize} onChange={(e) => setFontSize(parseInt(e.target.value))} className="w-full" />
+            </div>
+            <div className="mb-6">
+              <h3 className="font-semibold mb-3">Arbeitszeiten</h3>
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <div className="space-y-2">
+                  {[{d:1,l:'Montag'},{d:2,l:'Dienstag'},{d:3,l:'Mittwoch'},{d:4,l:'Donnerstag'},{d:5,l:'Freitag'}].map(({d,l}) => {
+                    const sched = displayUser?.dailySchedule || DEFAULT_SCHEDULE;
+                    const dayS  = sched[d] || {start:8, end:17, break:1};
+                    const isOff = dayS.start >= dayS.end || (dayS.start === 0 && dayS.end === 0);
+                    const toggleOff = () => {
+                      const newSched = {...sched, [d]: isOff ? {start:8,end:17,break:1} : {start:0,end:0,break:0}};
+                      const updatedUsers = users.map(u => u.id === displayUser.id ? {...u, dailySchedule: newSched} : u);
+                      saveUsers(updatedUsers);
+                      if (selectedUser?.id === displayUser.id) setSelectedUser({...displayUser, dailySchedule: newSched});
+                    };
+                    const setVal = (field, raw) => {
+                      const val = field === 'break' ? parseFloat(raw) || 0 : t2h(raw);
+                      const newSched = {...sched, [d]: {...dayS, [field]: val}};
+                      const updatedUsers = users.map(u => u.id === displayUser.id ? {...u, dailySchedule: newSched} : u);
+                      saveUsers(updatedUsers);
+                      if (selectedUser?.id === displayUser.id) setSelectedUser({...displayUser, dailySchedule: newSched});
+                    };
+                    const breakTime = dayS.break || 0;
+                    const netHours = Math.max(0, (dayS.end - dayS.start) - breakTime);
+                    return (
+                      <div key={d} className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-700 w-20">{l}</span>
+                        {isOff ? (
+                          <span className="text-sm text-red-500 italic flex-1">frei</span>
+                        ) : (
+                          <>
+                            <input type="time" value={h2t(dayS.start)} onChange={(e) => setVal('start', e.target.value)}
+                              className="p-1.5 border rounded text-sm flex-1" style={{minWidth:0}} />
+                            <span className="text-gray-400">–</span>
+                            <input type="time" value={h2t(dayS.end)} onChange={(e) => setVal('end', e.target.value)}
+                              className="p-1.5 border rounded text-sm flex-1" style={{minWidth:0}} />
+                            <span className="text-gray-400 text-sm">−</span>
+                            <input type="number" min="0" max="2" step="0.25" value={breakTime}
+                              onChange={(e) => setVal('break', e.target.value)}
+                              className="p-1.5 border rounded text-sm w-16 text-center" 
+                              placeholder="Pause" title="Pause (Std)" />
+                            <span className="text-sm font-semibold text-indigo-600 w-12 text-right">{netHours.toFixed(1)}h</span>
+                          </>
+                        )}
+                        <button onClick={toggleOff}
+                          className={`text-xs px-2 py-1 rounded font-semibold ${isOff ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                          {isOff ? 'An' : 'Aus'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="text-sm text-gray-500 text-right pt-3 border-t mt-3">
+                  Gesamt: <span className="font-bold text-indigo-600">{[1,2,3,4,5].reduce((s,d) => { const ds=(displayUser?.dailySchedule||DEFAULT_SCHEDULE)[d]||{start:8,end:17,break:1}; const gross=ds.end>ds.start?ds.end-ds.start:0; const brk=ds.break||0; return s+Math.max(0,gross-brk); }, 0).toFixed(1)}h / Woche</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-3">Projekte</h3>
+              <div className="space-y-2 mb-4">
+                {sortedProjects.map(p => (
+                  <div key={p.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+                    <input type="color" value={p.color} onChange={(e) => saveProjects(projects.map(x => x.id === p.id ? {...x, color: e.target.value} : x))} className="w-10 h-10 rounded" />
+                    <input type="text" value={p.name} onChange={(e) => saveProjects(projects.map(x => x.id === p.id ? {...x, name: e.target.value} : x))} className="flex-1 p-2 border rounded" />
+                    <button onClick={() => saveProjects(projects.filter(x => x.id !== p.id))} className="text-red-600"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => saveProjects([...projects, {id: 'p' + Date.now(), name: 'Neues Projekt', color: '#3b82f6'}])} 
+                className="w-full p-3 bg-indigo-600 text-white rounded-xl"><Plus className="w-5 h-5 inline" /> Projekt hinzufügen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAdmin && <AdminPanel />}
+    </div>
+  );
+};
+
+export default CapacityPlanner;
+
+    // App rendern
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<CapacityPlanner />);
+  </script>
+</body>
+</html>
