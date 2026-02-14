@@ -3750,6 +3750,8 @@ const CapacityPlanner = () => {
               dependencies.filter(d => d.fromId === sourceId).forEach(dep => {
                 const depWP = updated.find(w => w.id === dep.toId);
                 if (depWP && depWP.startDate) {
+                  // Überspringe gesperrte WPs
+                  if (depWP.locked) return;
                   const newDepStart = new Date(depWP.startDate);
                   newDepStart.setDate(newDepStart.getDate() + shiftAmount);
                   const newDepEnd = new Date(depWP.endDate);
@@ -3766,6 +3768,10 @@ const CapacityPlanner = () => {
               dependencies.filter(d => d.fromId === sourceId).forEach(dep => {
                 const depIndex = updatedDeps.findIndex(d => d.id === dep.id);
                 const currentLag = dep.lagDays || 0;
+                const depWP = updated.find(w => w.id === dep.toId);
+                
+                // Überspringe gesperrte WPs
+                if (depWP && depWP.locked) return;
                 
                 if (currentLag >= remainingShift) {
                   // Lag reicht aus - nur Lag reduzieren, B bleibt
@@ -3779,7 +3785,6 @@ const CapacityPlanner = () => {
                     updatedDeps[depIndex] = { ...updatedDeps[depIndex], lagDays: 0 };
                   }
                   
-                  const depWP = updated.find(w => w.id === dep.toId);
                   if (depWP && depWP.startDate) {
                     const newDepStart = new Date(depWP.startDate);
                     newDepStart.setDate(newDepStart.getDate() + shiftAmount);
@@ -4354,23 +4359,17 @@ const CapacityPlanner = () => {
       // Panel-Resize Handler
       React.useEffect(() => {
         if (!isResizingPanel) return;
-        let rafId = null;
         let lastWidth = leftPanelWidth;
         const handleMouseMove = (e) => {
-          if (rafId) return; // Throttle mit RAF
-          rafId = requestAnimationFrame(() => {
-            // Berücksichtige die Projekt-Sidebar Breite
-            const sidebarWidth = projectSidebarCollapsed ? 40 : 224;
-            const newWidth = Math.round(Math.max(250, Math.min(800, e.clientX - sidebarWidth)));
-            if (newWidth !== lastWidth) {
-              lastWidth = newWidth;
-              setLeftPanelWidth(newWidth);
-            }
-            rafId = null;
-          });
+          // Berücksichtige die Projekt-Sidebar Breite
+          const sidebarWidth = projectSidebarCollapsed ? 40 : 224;
+          const newWidth = Math.round(Math.max(0, Math.min(800, e.clientX - sidebarWidth)));
+          if (newWidth !== lastWidth) {
+            lastWidth = newWidth;
+            setLeftPanelWidth(newWidth);
+          }
         };
         const handleMouseUp = () => {
-          if (rafId) cancelAnimationFrame(rafId);
           setIsResizingPanel(false);
         };
         document.addEventListener('mousemove', handleMouseMove);
@@ -4378,7 +4377,6 @@ const CapacityPlanner = () => {
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
         return () => {
-          if (rafId) cancelAnimationFrame(rafId);
           document.removeEventListener('mousemove', handleMouseMove);
           document.removeEventListener('mouseup', handleMouseUp);
           document.body.style.cursor = '';
@@ -4389,22 +4387,16 @@ const CapacityPlanner = () => {
       // Column-Resize Handler (für individuelle Spaltenbreiten)
       React.useEffect(() => {
         if (!resizingColumn) return;
-        let rafId = null;
         let lastWidth = resizingColumn.startWidth;
         const handleMouseMove = (e) => {
-          if (rafId) return;
-          rafId = requestAnimationFrame(() => {
-            const diff = e.clientX - resizingColumn.startX;
-            const newWidth = Math.round(Math.max(40, Math.min(150, resizingColumn.startWidth + diff)));
-            if (newWidth !== lastWidth) {
-              lastWidth = newWidth;
-              setColumnWidths(prev => ({ ...prev, [resizingColumn.key]: newWidth }));
-            }
-            rafId = null;
-          });
+          const diff = e.clientX - resizingColumn.startX;
+          const newWidth = Math.round(Math.max(35, Math.min(200, resizingColumn.startWidth + diff)));
+          if (newWidth !== lastWidth) {
+            lastWidth = newWidth;
+            setColumnWidths(prev => ({ ...prev, [resizingColumn.key]: newWidth }));
+          }
         };
         const handleMouseUp = () => {
-          if (rafId) cancelAnimationFrame(rafId);
           setResizingColumn(null);
         };
         document.addEventListener('mousemove', handleMouseMove);
@@ -4412,7 +4404,6 @@ const CapacityPlanner = () => {
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
         return () => {
-          if (rafId) cancelAnimationFrame(rafId);
           document.removeEventListener('mousemove', handleMouseMove);
           document.removeEventListener('mouseup', handleMouseUp);
           document.body.style.cursor = '';
@@ -4550,6 +4541,7 @@ const CapacityPlanner = () => {
               </div>
             </div>
             <div className="absolute text-xs whitespace-nowrap pointer-events-none" style={{ left: x + width + 22, top: ROW_HEIGHT / 2 - 7 }}>
+              {wp.locked && <span className="text-orange-500 mr-1" title="Termin fixiert">🔒</span>}
               {showHours && totalHours > 0 && <span className="text-gray-500">{totalHours}h</span>}
               {!textFitsInBar && <span className="ml-1 text-gray-600">{wp.name}</span>}
               {assignmentText && <span className="text-indigo-500 ml-2">{assignmentText}</span>}
@@ -4749,13 +4741,13 @@ const CapacityPlanner = () => {
           </div>
           
           <div className="bg-white border-b px-2 py-1 flex items-center gap-4 flex-shrink-0">
-            {/* Ansicht Dropdown - enthält alles */}
+            {/* Anzeige Dropdown - enthält alles */}
             <div className="relative">
               <button 
                 onClick={() => setViewMenuOpen(!viewMenuOpen)}
                 className="text-xs px-3 py-1.5 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 flex items-center gap-1.5 font-medium"
               >
-                <span>⚙️ Ansicht</span>
+                <span>⚙️ Anzeige</span>
                 <ChevronDown className="w-3 h-3" />
               </button>
               {viewMenuOpen && (
@@ -4771,11 +4763,6 @@ const CapacityPlanner = () => {
                     <input type="checkbox" checked={showHours} onChange={(e) => setShowHours(e.target.checked)} className="rounded" />
                     <span>⏱️</span>
                     <span>Stunden</span>
-                  </label>
-                  <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm">
-                    <input type="checkbox" checked={resizeMode === 'rigid'} onChange={(e) => setResizeMode(e.target.checked ? 'rigid' : 'magnetic')} className="rounded" />
-                    <span>🔗</span>
-                    <span>Abstand halten</span>
                   </label>
                   
                   {/* Spalten */}
@@ -4835,6 +4822,21 @@ const CapacityPlanner = () => {
               <span className="text-xs w-10 text-center">{zoomLevel * 2}%</span>
               <button onClick={() => setZoomLevel(Math.min(100, zoomLevel + 25))} className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm">+</button>
             </div>
+            
+            {/* Abstand halten */}
+            <label className="flex items-center gap-1.5 ml-3 cursor-pointer text-xs">
+              <input type="checkbox" checked={resizeMode === 'rigid'} onChange={(e) => setResizeMode(e.target.checked ? 'rigid' : 'magnetic')} className="rounded w-3 h-3" />
+              <span className="text-gray-600">🔗 Abstand</span>
+            </label>
+            
+            {/* Liste ausblenden */}
+            <button 
+              onClick={() => setLeftPanelWidth(leftPanelWidth > 50 ? 0 : 384)}
+              className="ml-2 text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+              title={leftPanelWidth > 50 ? "Liste ausblenden" : "Liste einblenden"}
+            >
+              {leftPanelWidth > 50 ? '📋 Liste ▼' : '📋 Liste ▲'}
+            </button>
             
             {/* Aktive Baseline Anzeige */}
             {activeBaseline && selectedProjectId && (
@@ -5270,6 +5272,18 @@ const CapacityPlanner = () => {
                     </label>
                     <p className="text-xs text-gray-400 mt-1">Wenn deaktiviert, werden Wochenenden und Feiertage bei Verschiebungen übersprungen</p>
                   </div>
+                  <div>
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={sidebarWP.locked || false} 
+                        onChange={(e) => updateWorkPackage(sidebarWP.id, 'locked', e.target.checked)}
+                        className="rounded"
+                      />
+                      <span className="font-semibold text-gray-600">🔒 Termin fixiert</span>
+                    </label>
+                    <p className="text-xs text-gray-400 mt-1">Datum wird nicht durch Abhängigkeiten verschoben</p>
+                  </div>
                   <UserAssignmentSection wpId={sidebarWP.id} field="responsibles" label="Verantwortliche" filterKey="responsibles" />
                   <UserAssignmentSection wpId={sidebarWP.id} field="editors" label="Bearbeiter" filterKey="editors" />
                   <DivisionAssignmentSection wpId={sidebarWP.id} />
@@ -5328,7 +5342,8 @@ const CapacityPlanner = () => {
                   </div>
                   {/* Resize Handle für die gesamte Liste - am rechten Rand */}
                   <div 
-                    className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize bg-gray-300 hover:bg-indigo-500 active:bg-indigo-600 z-30 transition-colors"
+                    className="absolute right-0 top-0 bottom-0 w-4 cursor-col-resize bg-gray-400 hover:bg-indigo-500 active:bg-indigo-600 z-50 transition-colors"
+                    style={{ marginRight: -2 }}
                     onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsResizingPanel(true); }}
                     title="Liste verbreitern/verkleinern"
                   />
@@ -5406,7 +5421,8 @@ const CapacityPlanner = () => {
                   <div className="flex-shrink-0 bg-white border-r relative" style={{ width: leftPanelWidth, overflowAnchor: 'none' }}>
                     {/* Resize Handle für die gesamte Liste */}
                     <div 
-                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize bg-gray-300 hover:bg-indigo-500 active:bg-indigo-600 z-30 transition-colors"
+                      className="absolute right-0 top-0 bottom-0 w-4 cursor-col-resize bg-gray-400 hover:bg-indigo-500 active:bg-indigo-600 z-50 transition-colors"
+                      style={{ marginRight: -2 }}
                       onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsResizingPanel(true); }}
                       title="Liste verbreitern/verkleinern"
                     />
@@ -5704,6 +5720,7 @@ const CapacityPlanner = () => {
                         <defs>
                           <marker id="arrow-gray" markerWidth="5" markerHeight="4" refX="4" refY="2" orient="auto"><polygon points="0 0, 5 2, 0 4" fill="#9ca3af" /></marker>
                           <marker id="arrow-red" markerWidth="5" markerHeight="4" refX="4" refY="2" orient="auto"><polygon points="0 0, 5 2, 0 4" fill="#ef4444" /></marker>
+                          <marker id="arrow-orange" markerWidth="5" markerHeight="4" refX="4" refY="2" orient="auto"><polygon points="0 0, 5 2, 0 4" fill="#f97316" /></marker>
                         </defs>
                         {dependencies.map(dep => {
                           const fromWP = workPackages.find(w => w.id === dep.fromId);
@@ -5712,6 +5729,33 @@ const CapacityPlanner = () => {
                           
                           const depType = dep.type || 'FS'; // Standard ist Finish-to-Start
                           const isSSType = depType === 'SS';
+                          
+                          // Prüfe ob Ziel gesperrt ist und Konflikt besteht
+                          const toIsLocked = toWP.locked === true;
+                          let hasConflict = false;
+                          if (toIsLocked && !isSSType) {
+                            // FS: Konflikt wenn Vorgänger-Ende >= Nachfolger-Start
+                            const fromEndDate = getChildren(fromWP.id, workPackages).length > 0 
+                              ? calculateDatesFromChildren(fromWP.id, workPackages)?.endDate 
+                              : fromWP.endDate;
+                            const toStartDate = getChildren(toWP.id, workPackages).length > 0 
+                              ? calculateDatesFromChildren(toWP.id, workPackages)?.startDate 
+                              : toWP.startDate;
+                            if (fromEndDate && toStartDate && new Date(fromEndDate) >= new Date(toStartDate)) {
+                              hasConflict = true;
+                            }
+                          } else if (toIsLocked && isSSType) {
+                            // SS: Konflikt wenn Vorgänger-Start > Nachfolger-Start
+                            const fromStartDate = getChildren(fromWP.id, workPackages).length > 0 
+                              ? calculateDatesFromChildren(fromWP.id, workPackages)?.startDate 
+                              : fromWP.startDate;
+                            const toStartDate = getChildren(toWP.id, workPackages).length > 0 
+                              ? calculateDatesFromChildren(toWP.id, workPackages)?.startDate 
+                              : toWP.startDate;
+                            if (fromStartDate && toStartDate && new Date(fromStartDate) > new Date(toStartDate)) {
+                              hasConflict = true;
+                            }
+                          }
                           
                           // Berücksichtige Preview-Positionen für Pfeile
                           const fromPreview = previewPositions[dep.fromId];
@@ -5810,9 +5854,10 @@ const CapacityPlanner = () => {
                             path += ` L ${endX} ${endY}`;
                           }
                           
-                          // Alle Pfeile grau (rot bei Hover)
-                          const strokeColor = isHovered ? '#ef4444' : '#9ca3af';
-                          const arrowMarker = isHovered ? 'url(#arrow-red)' : 'url(#arrow-gray)';
+                          // Alle Pfeile grau (rot bei Hover, orange bei Konflikt)
+                          const strokeColor = hasConflict ? '#f97316' : (isHovered ? '#ef4444' : '#9ca3af');
+                          const arrowMarker = hasConflict ? 'url(#arrow-orange)' : (isHovered ? 'url(#arrow-red)' : 'url(#arrow-gray)');
+                          const strokeDasharray = hasConflict ? '6,3' : 'none';
                           
                           // Berechne Position für Lösch-Symbol auf der Linie
                           let deleteX, deleteY;
@@ -5834,9 +5879,22 @@ const CapacityPlanner = () => {
                           return (
                             <g key={dep.id} onMouseEnter={() => setHoveredDep(dep.id)} onMouseLeave={() => setHoveredDep(null)} style={{ pointerEvents: 'stroke', cursor: 'pointer' }}>
                               <path d={path} fill="none" stroke="transparent" strokeWidth="12" />
-                              <path d={path} fill="none" stroke={strokeColor} strokeWidth={isHovered ? 2.5 : 1.5} markerEnd={arrowMarker} />
-                              {isHovered && (
+                              <path d={path} fill="none" stroke={strokeColor} strokeWidth={isHovered || hasConflict ? 2.5 : 1.5} strokeDasharray={strokeDasharray} markerEnd={arrowMarker} />
+                              {/* Warnsymbol bei Konflikt */}
+                              {hasConflict && (
+                                <g transform={`translate(${deleteX - 10}, ${deleteY - 10})`} style={{ pointerEvents: 'all' }} title="Terminkonflikt: Ziel ist fixiert">
+                                  <circle cx="10" cy="10" r="10" fill="#fef3c7" stroke="#f97316" strokeWidth="1.5" />
+                                  <text x="10" y="14" textAnchor="middle" fontSize="13" fontWeight="bold" fill="#f97316">⚠</text>
+                                </g>
+                              )}
+                              {isHovered && !hasConflict && (
                                 <g transform={`translate(${deleteX - 8}, ${deleteY - 8})`} onClick={() => deleteDependency(dep.id)} style={{ cursor: 'pointer', pointerEvents: 'all' }}>
+                                  <circle cx="8" cy="8" r="9" fill="white" stroke="#ef4444" strokeWidth="1.5" />
+                                  <path d="M5 5 L11 11 M11 5 L5 11" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+                                </g>
+                              )}
+                              {isHovered && hasConflict && (
+                                <g transform={`translate(${deleteX + 14}, ${deleteY - 8})`} onClick={() => deleteDependency(dep.id)} style={{ cursor: 'pointer', pointerEvents: 'all' }}>
                                   <circle cx="8" cy="8" r="9" fill="white" stroke="#ef4444" strokeWidth="1.5" />
                                   <path d="M5 5 L11 11 M11 5 L5 11" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
                                 </g>
