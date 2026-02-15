@@ -5641,7 +5641,7 @@ const CapacityPlanner = () => {
                   
                   <div 
                     ref={ganttHScrollRef} 
-                    className="flex-1 overflow-x-auto" 
+                    className={`flex-1 overflow-x-auto ${workloadPanelHeight > 0 ? 'hide-scrollbar' : ''}`} 
                     style={{ overflowAnchor: 'none' }}
                     onScroll={(e) => {
                       // Scroll-Position immer speichern
@@ -6300,7 +6300,7 @@ const CapacityPlanner = () => {
                 <button onClick={() => setWorkloadPanelHeight(0)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
               </div>
               {/* Content */}
-              <div className="flex flex-1 overflow-y-auto overflow-x-hidden">
+              <div className="flex flex-1 overflow-y-auto overflow-x-hidden" style={{ scrollbarGutter: 'stable' }}>
                 {/* Left: Names */}
                 <div className="flex-shrink-0 bg-white border-r" style={{ width: leftPanelWidth }}>
                   {(() => {
@@ -6427,7 +6427,7 @@ const CapacityPlanner = () => {
                   if (ganttHScrollRef.current) ganttHScrollRef.current.scrollLeft = e.target.scrollLeft;
                   if (headerScrollRef.current) headerScrollRef.current.scrollLeft = e.target.scrollLeft;
                 }}>
-                  <div style={{ width: WEEKS_TO_SHOW * 7 * DAY_WIDTH }} className="relative">
+                  <div style={{ width: WEEKS_TO_SHOW * 7 * DAY_WIDTH }} className="relative min-w-max">
                     {(() => {
                       const gridRows = [];
                       const WLR = ROW_HEIGHT;
