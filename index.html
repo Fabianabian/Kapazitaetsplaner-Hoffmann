@@ -6969,8 +6969,8 @@ const CapacityPlanner = () => {
                                   const bColor = vacConflict ? '#ef4444' : barColor;
                                   borderStyle.borderTop = `2px solid ${bColor}`;
                                   borderStyle.borderBottom = `2px solid ${bColor}`;
-                                  if (isFirst || (i > 0 && formatDate(allDays[i-1]) < wpStart)) borderStyle.borderLeft = `2px solid ${bColor}`;
-                                  if (isLast || (i < allDays.length - 1 && formatDate(allDays[i+1]) > wpEnd)) borderStyle.borderRight = `2px solid ${bColor}`;
+                                  if (isFirst || (i > 0 && formatDate(allDays[i-1]) < wpStart)) { borderStyle.borderLeft = `2px solid ${bColor}`; borderStyle.borderTopLeftRadius = 4; borderStyle.borderBottomLeftRadius = 4; }
+                                  if (isLast || (i < allDays.length - 1 && formatDate(allDays[i+1]) > wpEnd)) { borderStyle.borderRight = `2px solid ${bColor}`; borderStyle.borderTopRightRadius = 4; borderStyle.borderBottomRightRadius = 4; }
                                 } else if (inRange && (isWE || isHol)) {
                                   borderStyle.borderTop = `1px dashed ${barColor}50`;
                                   borderStyle.borderBottom = `1px dashed ${barColor}50`;
