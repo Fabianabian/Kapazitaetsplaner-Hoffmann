@@ -6784,7 +6784,7 @@ const CapacityPlanner = () => {
                   <div style={{ minWidth: ganttContentWidth }}>
                       {(() => {
                       const gridRows = [];
-                      const WLR = ROW_HEIGHT;
+                      const WLR = Math.round(ROW_HEIGHT * workloadZoom / 100);
                       
                       const renderUserRow = (u, key) => (
                         <div key={key || u.id} className="flex border-b border-gray-100" style={{ height: WLR }}>
