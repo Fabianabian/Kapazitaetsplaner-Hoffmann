@@ -3187,7 +3187,20 @@ const CapacityPlanner = () => {
       
       // Nutze Parent-States für Zoom und Spalten
       const zoomLevel = ganttZoomLevel;
-      const setZoomLevel = setGanttZoomLevel;
+      const changeZoom = (newLevel) => {
+        // Preserve scroll ratio when zooming
+        const oldDayWidth = Math.round(35 * ganttZoomLevel / 200);
+        const newDayWidth = Math.round(35 * newLevel / 200);
+        if (oldDayWidth > 0 && ganttHScrollRef.current) {
+          const scrollLeft = ganttHScrollRef.current.scrollLeft;
+          const ratio = scrollLeft / oldDayWidth;
+          const newScroll = Math.round(ratio * newDayWidth);
+          // Store for restoration after render
+          window._zoomScrollTarget = newScroll;
+        }
+        setGanttZoomLevel(newLevel);
+      };
+      const setZoomLevel = changeZoom;
       
       // sidebarWP wird immer frisch aus workPackages geholt
       const sidebarWP = sidebarWPId ? workPackages.find(w => w.id === sidebarWPId) : null;
@@ -4513,14 +4526,13 @@ const CapacityPlanner = () => {
       // Gesamtes Projekt verschieben (alle WPs um daysDiff Tage)
       const moveProject = (projectId, daysDiff) => {
         if (daysDiff === 0) return;
-        const projectWPIds = workPackages.filter(wp => wp.projectId === projectId).map(wp => wp.id);
-        if (projectWPIds.length === 0) return;
-        // Fixierte APs nicht verschieben
-        const lockedIds = workPackages.filter(wp => projectWPIds.includes(wp.id) && wp.locked).map(wp => wp.id);
-        const idsToMove = projectWPIds.filter(id => !lockedIds.includes(id));
+        const projectWPs = workPackages.filter(wp => wp.projectId === projectId);
+        if (projectWPs.length === 0) return;
+        // Wenn irgendein AP fixiert ist, gesamtes Projekt nicht verschieben
+        if (projectWPs.some(wp => wp.locked)) return;
         
         const updated = workPackages.map(wp => {
-          if (idsToMove.includes(wp.id) && wp.startDate && wp.endDate) {
+          if (wp.projectId === projectId && wp.startDate && wp.endDate) {
             const newStart = parseLocalDate(wp.startDate);
             newStart.setDate(newStart.getDate() + daysDiff);
             const newEnd = parseLocalDate(wp.endDate);
@@ -4906,6 +4918,22 @@ const CapacityPlanner = () => {
       // Scroll-Position bei JEDEM Render wiederherstellen (Komponente wird bei Parent-State-Änderungen remounted)
       if (!window._workloadScroll) window._workloadScroll = { top: 0 };
       React.useLayoutEffect(() => {
+        // Zoom scroll restoration (takes priority)
+        if (window._zoomScrollTarget !== undefined) {
+          const target = window._zoomScrollTarget;
+          delete window._zoomScrollTarget;
+          if (ganttHScrollRef.current) {
+            ganttHScrollRef.current.scrollLeft = target;
+            window._ganttScrollLeft.value = target;
+          }
+          if (headerScrollRef.current) headerScrollRef.current.scrollLeft = target;
+          if (workloadScrollRef.current) workloadScrollRef.current.scrollLeft = target;
+          // Also restore vertical scroll
+          if (ganttScrollRef.current && window._ganttScrollTop.value !== undefined) {
+            ganttScrollRef.current.scrollTop = window._ganttScrollTop.value;
+          }
+          return;
+        }
         if (window._ganttInitScrolled) {
           if (ganttScrollRef.current && window._ganttScrollTop.value !== undefined) {
             ganttScrollRef.current.scrollTop = window._ganttScrollTop.value;
@@ -5234,6 +5262,75 @@ const CapacityPlanner = () => {
               {wp.locked && <span className="text-orange-500 mr-1" title="Termin fixiert">🔒</span>}
               {showHours && totalHours > 0 && <span className="text-gray-500">{totalHours}h</span>}
               {!textFitsInBar && <span className={`ml-1 text-gray-600 ${isWPDone(wp.id, workPackages) ? 'line-through opacity-50' : ''}`}>{wp.name}</span>}
+              {assignmentText && <span className="text-indigo-500 ml-2">{assignmentText}</span>}
+            </div>
+          </React.Fragment>
+        );
+      };
+      
+      const renderMilestone = (wp, x, color) => {
+        const isDragging = draggedWP?.wp?.id === wp.id;
+        const isSelected = selectedWP?.id === wp.id;
+        const isSidebarActive = sidebarWPId === wp.id;
+        const assignmentText = showAssignments ? getAssignmentText(wp) : '';
+        const size = 14;
+        const centerX = x + Math.floor(DAY_WIDTH / 2);
+        
+        let displayX = centerX - size / 2;
+        if (isDragging && draggedWP.previewStart) {
+          displayX = dateToX(draggedWP.previewStart) + Math.floor(DAY_WIDTH / 2) - size / 2;
+        }
+        
+        return (
+          <React.Fragment>
+            {/* Hit area for interactions */}
+            <div 
+              className="absolute"
+              style={{ left: displayX - 6, width: size + 12, top: 0, height: ROW_HEIGHT, zIndex: 5, overflow: 'visible' }}
+            >
+              {/* Link handle left */}
+              <div 
+                className="absolute opacity-0 hover:opacity-100 transition-opacity cursor-crosshair z-10"
+                style={{ left: -2, top: ROW_HEIGHT / 2 - 5, width: 10, height: 10, borderRadius: '50%', backgroundColor: '#6366f1', border: '2px solid white' }}
+                onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setLinkingFrom({ ...wp, fromStart: true }); setLinkMousePos({ x: e.clientX, y: e.clientY }); }}
+              />
+              {/* Link handle right */}
+              <div 
+                className="absolute opacity-0 hover:opacity-100 transition-opacity cursor-crosshair z-10"
+                style={{ right: -2, top: ROW_HEIGHT / 2 - 5, width: 10, height: 10, borderRadius: '50%', backgroundColor: '#6366f1', border: '2px solid white' }}
+                onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setLinkingFrom({ ...wp, fromStart: false }); setLinkMousePos({ x: e.clientX, y: e.clientY }); }}
+              />
+            </div>
+            {/* Diamond shape */}
+            <div 
+              className="absolute cursor-move"
+              style={{ left: displayX, top: ROW_HEIGHT / 2 - size / 2, width: size, height: size, opacity: isDragging ? 0.6 : isWPDone(wp.id, workPackages) ? 0.4 : 1, zIndex: 6 }}
+              data-wp-id={wp.id}
+              onMouseEnter={(e) => { if (!draggedWP) { const rect = e.currentTarget.getBoundingClientRect(); setHoveredWP({ wp, x: rect.left, y: rect.bottom + 5, totalHours: 0 }); }}}
+              onMouseLeave={() => setHoveredWP(null)}
+              onClick={(e) => { e.stopPropagation(); if (sidebarWPId && !detailsCollapsed) { openSidebar(wp.id); } else { setSelectedWP(wp); } }}
+              onDoubleClick={(e) => { e.stopPropagation(); e.preventDefault(); openSidebar(wp.id); }}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, type: 'gantt-wp', wp, project: projects.find(p => p.id === wp.projectId) }); }}
+              onMouseDown={(e) => { 
+                if (e.detail > 1) return; 
+                if (wp.locked) return;
+                e.preventDefault(); 
+                if (ganttScrollRef.current) { window._ganttScrollTop.value = ganttScrollRef.current.scrollTop; window._ganttScrollTop.isDragging = true; } 
+                if (ganttHScrollRef.current) { window._ganttScrollLeft.value = ganttHScrollRef.current.scrollLeft; } 
+                setDraggedWP({ wp, startX: e.clientX, originalX: x, isSummary: false, daysDiff: 0 }); 
+              }}
+            >
+              <div className="w-full h-full rotate-45" style={{ 
+                backgroundColor: color, 
+                border: (isSelected || isSidebarActive) ? '2px solid #312e81' : 'none',
+                boxShadow: isSidebarActive ? '0 0 0 2px rgba(99,102,241,0.4)' : undefined
+              }} />
+            </div>
+            {/* Label */}
+            <div className="absolute text-xs whitespace-nowrap pointer-events-none flex items-center" style={{ left: displayX + size + 8, top: ROW_HEIGHT / 2 - 7 }}>
+              {isWPDone(wp.id, workPackages) && <span className="text-green-500 mr-1 flex-shrink-0"><CheckCircle2 className="w-3.5 h-3.5" /></span>}
+              {wp.locked && <span className="text-orange-500 mr-1" title="Termin fixiert">🔒</span>}
+              <span className={`text-gray-600 ${isWPDone(wp.id, workPackages) ? 'line-through opacity-50' : ''}`}>{wp.name}</span>
               {assignmentText && <span className="text-indigo-500 ml-2">{assignmentText}</span>}
             </div>
           </React.Fragment>
@@ -6411,16 +6508,19 @@ const CapacityPlanner = () => {
                       />
                     {allProjectsData.map(({ project, flatList }) => (
                       <div key={project.id}>
-                        <div className={`flex items-center justify-between cursor-grab active:cursor-grabbing hover:bg-gray-100 border-b ${draggedWP?.isProject && draggedWP?.projectId === project.id ? 'bg-indigo-50' : 'bg-gray-50'}`} style={{ height: ROW_HEIGHT }} 
+                        {(() => {
+                          const projectHasLocked = workPackages.some(w => w.projectId === project.id && w.locked);
+                          return (
+                        <div className={`flex items-center justify-between ${projectHasLocked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'} hover:bg-gray-100 border-b ${draggedWP?.isProject && draggedWP?.projectId === project.id ? 'bg-indigo-50' : 'bg-gray-50'}`} style={{ height: ROW_HEIGHT }}
+                          title={projectHasLocked ? 'Projekt hat fixierte Termine – Verschieben gesperrt' : 'Ziehen zum Verschieben'} 
                           onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, type: 'project', project }); }}
                           onMouseDown={(e) => {
                             if (e.button !== 0) return;
-                            // Nicht bei Klick auf Buttons
                             if (e.target.closest('button')) return;
+                            if (projectHasLocked) return;
                             e.preventDefault();
                             if (ganttScrollRef.current) { window._ganttScrollTop.value = ganttScrollRef.current.scrollTop; window._ganttScrollTop.isDragging = true; }
                             if (ganttHScrollRef.current) { window._ganttScrollLeft.value = ganttHScrollRef.current.scrollLeft; }
-                            // Berechne projStart/projEnd
                             const projectWPs = workPackages.filter(w => w.projectId === project.id);
                             let pStart = null, pEnd = null;
                             projectWPs.forEach(wp => {
@@ -6448,7 +6548,10 @@ const CapacityPlanner = () => {
                             );
                           })()}
                           <button onClick={(e) => { e.stopPropagation(); addWorkPackage(project.id); }} className="p-1 hover:bg-indigo-100 rounded text-indigo-600 mr-2"><Plus className="w-4 h-4" /></button>
+                          {projectHasLocked && <span className="text-orange-400 mr-2 text-xs" title="Projekt hat fixierte Termine – Verschieben gesperrt">🔒</span>}
                         </div>
+                          );
+                        })()}
                         {!showProjectBarsOnly && flatList.map((wp, wpIndex) => {
                           const hasChildren = getChildren(wp.id, workPackages).length > 0;
                           const isExpanded = expandedPackages[wp.id] !== false;
@@ -6563,7 +6666,11 @@ const CapacityPlanner = () => {
                                     {isWPDone(wp.id, workPackages) ? <CheckCircle2 className="w-4 h-4" /> : <CircleIcon className="w-4 h-4" />}
                                   </button>
                                   {/* Color dot */}
-                                  <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0 mx-0.5" style={{ backgroundColor: wp.color || project.color }} />
+                                  {wp.isMilestone ? (
+                                    <div className="w-2.5 h-2.5 rotate-45 flex-shrink-0 mx-0.5" style={{ backgroundColor: wp.color || project.color }} />
+                                  ) : (
+                                    <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0 mx-0.5" style={{ backgroundColor: wp.color || project.color }} />
+                                  )}
                                   {/* Name */}
                                   {editingName === wp.id ? <input autoFocus type="text" defaultValue={wp.name} className="flex-1 min-w-0 px-1 border rounded text-xs" onClick={(e) => e.stopPropagation()} onBlur={(e) => { const updated = workPackages.map(w => w.id === wp.id ? { ...w, name: e.target.value } : w); saveWorkPackages(updated); setEditingName(null); }} onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingName(null); }} /> : <span className={`truncate cursor-text ${hasChildren ? 'font-semibold text-gray-800' : 'text-gray-700'} ${isWPDone(wp.id, workPackages) ? 'line-through opacity-50' : ''}`} onDoubleClick={(e) => { e.stopPropagation(); setEditingName(wp.id); }}>{wp.name}</span>}
                                 </div>
@@ -6672,10 +6779,11 @@ const CapacityPlanner = () => {
                               return sum + hrs + eHrs;
                             }, 0);
                             return (
-                            <div className={`relative flex items-center border-b cursor-grab active:cursor-grabbing ${draggedWP?.isProject && draggedWP?.projectId === project.id ? 'bg-indigo-50' : 'bg-gray-50'}`} style={{ height: ROW_HEIGHT, minWidth: WEEKS_TO_SHOW * 7 * DAY_WIDTH }}
-                              title="Ziehen zum Verschieben aller Arbeitspakete"
+                            <div className={`relative flex items-center border-b ${projectWPs.some(w => w.locked) ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'} ${draggedWP?.isProject && draggedWP?.projectId === project.id ? 'bg-indigo-50' : 'bg-gray-50'}`} style={{ height: ROW_HEIGHT, minWidth: WEEKS_TO_SHOW * 7 * DAY_WIDTH }}
+                              title={projectWPs.some(w => w.locked) ? 'Projekt hat fixierte Termine – Verschieben gesperrt' : 'Ziehen zum Verschieben aller Arbeitspakete'}
                               onMouseDown={(e) => {
                                 if (e.button !== 0) return;
+                                if (projectWPs.some(w => w.locked)) return;
                                 e.stopPropagation(); e.preventDefault();
                                 if (ganttScrollRef.current) { window._ganttScrollTop.value = ganttScrollRef.current.scrollTop; window._ganttScrollTop.isDragging = true; }
                                 if (ganttHScrollRef.current) { window._ganttScrollLeft.value = ganttHScrollRef.current.scrollLeft; }
@@ -6860,7 +6968,7 @@ const CapacityPlanner = () => {
                                   }}
                                 >
                                   {shadowElement}
-                                  {hasChildren && isExpanded ? renderBracket(wp, x, width, color) : renderBar(wp, x, width, color, wp._level > 0)}
+                                  {wp.isMilestone ? renderMilestone(wp, x, color) : hasChildren && isExpanded ? renderBracket(wp, x, width, color) : renderBar(wp, x, width, color, wp._level > 0)}
                                 </div>
                                 
                                 {/* Drop-Indikator unten */}
@@ -7152,7 +7260,7 @@ const CapacityPlanner = () => {
               <div className="border-t my-1" />
               <button onClick={() => { if (confirm(`Projekt "${contextMenu.project.name}" und alle zugehörigen Arbeitspakete unwiderruflich löschen?`)) { const projId = contextMenu.project.id; saveProjects((projects || []).filter(p => p.id !== projId)); saveWorkPackages((workPackages || []).filter(wp => wp.projectId !== projId)); saveDependencies((dependencies || []).filter(d => { const fromWP = (workPackages || []).find(w => w.id === d.fromId); const toWP = (workPackages || []).find(w => w.id === d.toId); return fromWP?.projectId !== projId && toWP?.projectId !== projId; })); } setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 className="w-4 h-4" /> Endgültig löschen</button>
             </React.Fragment>}
-            {contextMenu.type === 'wp' && <React.Fragment><div className="px-3 py-1 text-xs text-gray-500 border-b truncate max-w-48">{contextMenu.wp.name}</div><button onClick={() => { addWorkPackage(contextMenu.wp.projectId, contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><Plus className="w-4 h-4 text-green-600" /> Tochter-Arbeitspaket</button><button onClick={() => { addWorkPackageBelow(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><Plus className="w-4 h-4 text-indigo-600" /> Arbeitspaket darunter</button><button onClick={() => { copyWorkPackage(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><Copy className="w-4 h-4 text-blue-600" /> Kopieren</button><button onClick={() => { indentWorkPackage(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><ChevronRight className="w-4 h-4" /> Einrücken</button><button onClick={() => { outdentWorkPackage(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><ChevronLeft className="w-4 h-4" /> Ausrücken</button><div className="border-t my-1" /><button onClick={() => { showWPResourcePlanning(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center text-orange-600">📊</span> Ressourcen-Feinplanung</button><div className="border-t my-1" /><button onClick={() => { deleteWorkPackage(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 className="w-4 h-4" /> Löschen</button></React.Fragment>}
+            {contextMenu.type === 'wp' && <React.Fragment><div className="px-3 py-1 text-xs text-gray-500 border-b truncate max-w-48">{contextMenu.wp.name}</div><button onClick={() => { addWorkPackage(contextMenu.wp.projectId, contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><Plus className="w-4 h-4 text-green-600" /> Tochter-Arbeitspaket</button><button onClick={() => { addWorkPackageBelow(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><Plus className="w-4 h-4 text-indigo-600" /> Arbeitspaket darunter</button><button onClick={() => { copyWorkPackage(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><Copy className="w-4 h-4 text-blue-600" /> Kopieren</button><button onClick={() => { indentWorkPackage(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><ChevronRight className="w-4 h-4" /> Einrücken</button><button onClick={() => { outdentWorkPackage(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><ChevronLeft className="w-4 h-4" /> Ausrücken</button><button onClick={() => { const wp = contextMenu.wp; const updated = workPackages.map(w => w.id === wp.id ? { ...w, isMilestone: !w.isMilestone, endDate: !w.isMilestone ? w.startDate : w.endDate } : w); saveWorkPackages(updated); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center text-amber-600">◆</span> {contextMenu.wp.isMilestone ? 'Zu Arbeitspaket' : 'Zu Meilenstein'}</button><div className="border-t my-1" /><button onClick={() => { showWPResourcePlanning(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center text-orange-600">📊</span> Ressourcen-Feinplanung</button><div className="border-t my-1" /><button onClick={() => { deleteWorkPackage(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 className="w-4 h-4" /> Löschen</button></React.Fragment>}
             {contextMenu.type === 'gantt-wp' && <React.Fragment>
               <div className="px-3 py-1 text-xs text-gray-500 border-b truncate max-w-48">{contextMenu.wp.name}</div>
               <div className="px-3 py-2 text-xs text-gray-600">Farbe wählen:</div>
@@ -7172,6 +7280,7 @@ const CapacityPlanner = () => {
                 {contextMenu.wp.locked ? <span className="w-4 h-4 text-center">✅</span> : <span className="w-4 h-4 text-center text-gray-300">☐</span>}
                 🔒 Termin fixiert
               </button>
+              <button onClick={() => { const wp = contextMenu.wp; const updated = workPackages.map(w => w.id === wp.id ? { ...w, isMilestone: !w.isMilestone, endDate: !w.isMilestone ? w.startDate : w.endDate } : w); saveWorkPackages(updated); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center text-amber-600">◆</span> {contextMenu.wp.isMilestone ? 'Zu Arbeitspaket' : 'Zu Meilenstein'}</button>
               <button onClick={() => { setSelectedWPs([]); setSidebarWPId(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><Settings className="w-4 h-4" /> Details bearbeiten</button>
               <button onClick={() => { showWPResourcePlanning(contextMenu.wp.id); setContextMenu(null); }} className="w-full px-3 py-2 text-left text-sm hover:bg-indigo-50 flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center text-orange-600">📊</span> Ressourcen-Feinplanung</button>
               <div className="border-t my-1" />
