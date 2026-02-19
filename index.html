@@ -460,8 +460,22 @@ const CapacityPlanner = () => {
   const [draggedTask, setDraggedTask] = useState(null);
   const [resizingTask, setResizingTask] = useState(null);
   const isDraggingRef = React.useRef(false);
+  const isScrollingRef = React.useRef(false);
+  const scrollTimeoutRef = React.useRef(null);
   // Keep ref in sync with drag state (so intervals can read it without stale closures)
   useEffect(() => { isDraggingRef.current = !!(draggedTask || draggedProject || resizingTask); }, [draggedTask, draggedProject, resizingTask]);
+
+  // Detect scrolling (wheel/touch) to pause sync during scroll momentum
+  useEffect(() => {
+    const onWheel = () => {
+      isScrollingRef.current = true;
+      clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => { isScrollingRef.current = false; }, 800);
+    };
+    window.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('touchmove', onWheel, { passive: true });
+    return () => { window.removeEventListener('wheel', onWheel); window.removeEventListener('touchmove', onWheel); };
+  }, []);
   const [fontSize, setFontSize] = useState(12);
   const [dashboardFontSize, setDashboardFontSize] = useState(10); // Schriftgröße für Dashboard
   const [expandedNotes, setExpandedNotes] = useState({});
@@ -949,7 +963,7 @@ const CapacityPlanner = () => {
       ganttHolidays: setHolidays, highlightedDays: setHighlightedDays, colorThresholds: setColorThresholds
     };
     const handler = async (e) => {
-      if (isDraggingRef.current) return; // Don't interrupt drag operations
+      if (isDraggingRef.current || isScrollingRef.current) return; // Don't interrupt drag/scroll
       const key = e.data;
       const setter = keySetterMap[key];
       if (!setter) return;
@@ -995,7 +1009,7 @@ const CapacityPlanner = () => {
     
     const pollSync = async () => {
       try {
-        if (isDraggingRef.current) return; // Don't interrupt drag operations
+        if (isDraggingRef.current || isScrollingRef.current) return; // Don't interrupt drag/scroll
         // 1 read: check if version changed
         const vResult = await window.storage.get('_syncVersion', true).catch(() => null);
         const remoteVersion = vResult ? JSON.parse(vResult.value) : 0;
@@ -1023,7 +1037,7 @@ const CapacityPlanner = () => {
     
     const syncPresence = async () => {
       try {
-        if (isDraggingRef.current) return; // Don't interrupt drag operations
+        if (isDraggingRef.current || isScrollingRef.current) return; // Don't interrupt drag/scroll
         // 1 read: get all presence data
         const result = await window.storage.get('_presence', true).catch(() => null);
         const allPresence = result ? JSON.parse(result.value) : {};
@@ -3301,6 +3315,22 @@ const CapacityPlanner = () => {
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">📊</span>
                   <h1 className="text-xl font-bold">Projekt-Dashboard - Stundenübersicht nach Bereichen</h1>
+                  {lastSync && <span className="text-[9px] text-gray-400 flex items-center gap-1" title={`Letzter Sync: ${lastSync.toLocaleTimeString()}\nSession: ${sessionId.slice(-4)}\nDein Tier: ${myAnimalEmoji}`}><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />{myAnimalEmoji}</span>}
+                  {onlineUsers.length > 0 && (
+                    <div className="flex items-center gap-1 ml-1">
+                      {onlineUsers.map(p => {
+                        const viewLabel = p.view === 'grobplanung' ? '📋 Grobplanung' : p.view === 'teamdashboard' ? '📊 Team DB' : p.view === 'projektplanung' ? '📐 Projektplanung' : p.view;
+                        return (
+                          <div key={p.sessionId} className="relative group">
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold cursor-default border-2 border-white shadow-sm" style={{ backgroundColor: p.color }} title={`${p.userName} — ${viewLabel}`}>
+                              <span style={{ fontSize: 16 }}>{p.animal || '🦫'}</span>
+                            </div>
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 rounded-full border border-white" />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 
                 {/* Navigation Buttons */}
@@ -6394,6 +6424,22 @@ const CapacityPlanner = () => {
             <div className="flex items-center gap-3">
               <Calendar className="w-6 h-6 text-indigo-600" />
               <h1 className="text-xl font-bold">Projektplanung</h1>
+              {lastSync && <span className="text-[9px] text-gray-400 flex items-center gap-1" title={`Letzter Sync: ${lastSync.toLocaleTimeString()}\nSession: ${sessionId.slice(-4)}\nDein Tier: ${myAnimalEmoji}`}><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />{myAnimalEmoji}</span>}
+              {onlineUsers.length > 0 && (
+                <div className="flex items-center gap-1 ml-1">
+                  {onlineUsers.map(p => {
+                    const viewLabel = p.view === 'grobplanung' ? '📋 Grobplanung' : p.view === 'teamdashboard' ? '📊 Team DB' : p.view === 'projektplanung' ? '📐 Projektplanung' : p.view;
+                    return (
+                      <div key={p.sessionId} className="relative group">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold cursor-default border-2 border-white shadow-sm" style={{ backgroundColor: p.color }} title={`${p.userName} — ${viewLabel}`}>
+                          <span style={{ fontSize: 16 }}>{p.animal || '🦫'}</span>
+                        </div>
+                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 rounded-full border border-white" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               {selectedFolderId && !selectedProjectId && (
                 <React.Fragment>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
