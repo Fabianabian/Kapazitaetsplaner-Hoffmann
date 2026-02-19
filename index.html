@@ -8477,7 +8477,7 @@ const CapacityPlanner = () => {
                             <div key={resHeaderKey} className="flex items-center gap-1 px-2 py-1 border-b cursor-pointer font-bold" style={{ height: WLR_GRP, backgroundColor: dm ? '#2a2a3e' : '#dcdcdc', borderColor: grpBorder, color: dm ? '#c0c0d8' : '#444444' }} onClick={() => toggleGroup(resHeaderKey)}>
                               <span style={{ color: '#888888' }}>{resHeaderExp ? '▼' : '▶'}</span>
                               <span className="truncate">Ressourcen</span>
-                              <span className="ml-auto font-normal" style={{ color: '#888888' }}>{filteredResources.length}</span>
+                              <span className="ml-auto font-normal" style={{ color: '#888888' }}>{filteredResources.length} EH</span>
                             </div>
                           );
                           if (resHeaderExp) {
@@ -8498,7 +8498,7 @@ const CapacityPlanner = () => {
                                 <TreeLines level={1} isLast={isLastTg} parentLines={[]} />
                                 <span style={{ color: '#999999' }}>{isExp ? '▼' : '▶'}</span>
                                 <span className="truncate">{tg.label}</span>
-                                <span className="ml-auto font-normal" style={{ color: '#999999' }}>{grouped.length}</span>
+                                <span className="ml-auto font-normal" style={{ color: '#999999' }}>{grouped.length} EH</span>
                               </div>
                             );
                             if (isExp) {
@@ -8571,7 +8571,7 @@ const CapacityPlanner = () => {
                           <div key={'rg_' + tg.type} className="flex items-center gap-1 px-2 py-1 border-b cursor-pointer font-bold" style={{ height: WLR_GRP, backgroundColor: dm ? '#2a2a3e' : '#dcdcdc', borderColor: grpBorder, color: dm ? '#c0c0d8' : '#444444' }} onClick={() => toggleGroup(tgKey)}>
                             <span style={{ color: '#888888' }}>{isExp ? '▼' : '▶'}</span>
                             <span className="truncate">{tg.label}</span>
-                            <span className="ml-auto font-normal" style={{ color: '#888888' }}>{grouped.length}</span>
+                            <span className="ml-auto font-normal" style={{ color: '#888888' }}>{grouped.length} EH</span>
                           </div>
                         );
                         if (isExp) {
@@ -8699,12 +8699,12 @@ const CapacityPlanner = () => {
                             else if (isToday) bgStyle.backgroundColor = dBg('#fef2f2', '#3a2028');
                             else if (isHol) bgStyle.backgroundColor = dBg('#fee2e2', '#4a2020');
                             else if (isWE) bgStyle.backgroundColor = dBg('#e5e7eb', '#1a1a2a');
-                            else if (wlBarMode === 'number' && hours > 0 && ratio > 1) bgStyle.backgroundColor = dBg('#fee2e2', '#4a2020');
-                            else if (wlBarMode === 'number' && hours > 0 && ratio > 0.8) bgStyle.backgroundColor = dBg('#fef9c3', '#4a4020');
-                            else if (wlBarMode === 'number' && hours > 0 && ratio > 0.6) bgStyle.backgroundColor = dBg('#e0e7ff', '#2a2a50');
-                            else if (wlBarMode === 'number' && hours > 0) bgStyle.backgroundColor = dBg('#f0fdf4', '#1a3a28');
+                            else if (wlBarMode === 'number' && hours > 0 && ratio > 1) bgStyle.backgroundColor = dBg('#fecaca', '#5a1a1a');
+                            else if (wlBarMode === 'number' && hours > 0 && ratio > 0.8) bgStyle.backgroundColor = dBg('#fed7aa', '#5a3a10');
+                            else if (wlBarMode === 'number' && hours > 0 && ratio > 0.6) bgStyle.backgroundColor = dBg('#c7d2fe', '#2a2a60');
+                            else if (wlBarMode === 'number' && hours > 0) bgStyle.backgroundColor = dBg('#bbf7d0', '#1a4028');
                             else if (darkMode) bgStyle.backgroundColor = '#2a2a3e';
-                            const numTextColor = isVac && !isWE ? 'text-orange-500' : ratio > 1 ? 'text-red-600 font-bold' : ratio > 0.8 ? 'text-orange-600' : ratio > 0.6 ? 'text-indigo-600 font-medium' : hours > 0 ? 'text-green-700' : 'text-gray-300';
+                            const numTextColor = isVac && !isWE ? 'text-orange-500' : ratio > 1 ? 'text-red-700 font-bold' : ratio > 0.8 ? 'text-orange-700 font-bold' : ratio > 0.6 ? 'text-indigo-700 font-bold' : hours > 0 ? 'text-green-700 font-bold' : 'text-gray-300';
                             
                             return (
                               <div 
@@ -8792,13 +8792,13 @@ const CapacityPlanner = () => {
                             const totalBarPct = Math.min(normalPct + overPct, 100);
                             const capPct = totalCap > 0 ? Math.min(100, (totalCap / refMax) * 100) : 0;
                             
-                            const numTextColor = ratio > 1 ? (darkMode ? 'text-red-400 font-bold' : 'text-red-600 font-bold') : ratio > 0.8 ? (darkMode ? 'text-orange-400' : 'text-orange-600') : ratio > 0.6 ? (darkMode ? 'text-indigo-400 font-medium' : 'text-indigo-600 font-medium') : total > 0 ? (darkMode ? 'text-green-400 font-medium' : 'text-green-700 font-medium') : '';
+                            const numTextColor = ratio > 1 ? (darkMode ? 'text-red-300 font-bold' : 'text-red-700 font-bold') : ratio > 0.8 ? (darkMode ? 'text-orange-300 font-bold' : 'text-orange-700 font-bold') : ratio > 0.6 ? (darkMode ? 'text-indigo-300 font-bold' : 'text-indigo-700 font-bold') : total > 0 ? (darkMode ? 'text-green-300 font-bold' : 'text-green-700 font-bold') : '';
                             const cellBg = isToday ? dBg('#fef2f2','#3a2028') : isHol ? dBg('#fee2e2','#4a2020') : isWE ? dBg('#e5e7eb','#1a1a2a') : (darkMode ? '#2a2a3e' : undefined);
                             
                             // Number mode backgrounds
                             let numBg = cellBg;
                             if (wlBarMode === 'number' && !isWE && !isHol && !isToday && totalCap > 0) {
-                              numBg = ratio > 1 ? dBg('#fee2e2','#4a2020') : ratio > 0.8 ? dBg('#fef9c3','#4a4020') : ratio > 0.6 ? dBg('#e0e7ff','#2a2a50') : total > 0 ? dBg('#f0fdf4','#1a3a28') : undefined;
+                              numBg = ratio > 1 ? dBg('#fecaca','#5a1a1a') : ratio > 0.8 ? dBg('#fed7aa','#5a3a10') : ratio > 0.6 ? dBg('#c7d2fe','#2a2a60') : total > 0 ? dBg('#bbf7d0','#1a4028') : undefined;
                             }
                             
                             return <div key={i} className="flex-shrink-0 border-r border-b text-center wl-t-tiny text-[8px] flex items-center justify-center relative overflow-hidden" style={{ width: DAY_WIDTH, height: WLR_SUM, backgroundColor: wlBarMode === 'number' ? (numBg || cellBg) : cellBg, borderColor: grpBorder }}>
@@ -8966,12 +8966,12 @@ const CapacityPlanner = () => {
                             else if (isToday) bgStyle.backgroundColor = dBg('#fef2f2', '#3a2028');
                             else if (isHol) bgStyle.backgroundColor = dBg('#fee2e2', '#4a2020');
                             else if (isWE) bgStyle.backgroundColor = dBg('#e5e7eb', '#1a1a2a');
-                            else if (wlBarMode === 'number' && hours > 0 && ratio > 1) bgStyle.backgroundColor = dBg('#fee2e2', '#4a2020');
-                            else if (wlBarMode === 'number' && hours > 0 && ratio > 0.8) bgStyle.backgroundColor = dBg('#fef9c3', '#4a4020');
-                            else if (wlBarMode === 'number' && hours > 0 && ratio > 0.6) bgStyle.backgroundColor = dBg('#e0e7ff', '#2a2a50');
-                            else if (wlBarMode === 'number' && hours > 0) bgStyle.backgroundColor = dBg('#f0fdf4', '#1a3a28');
+                            else if (wlBarMode === 'number' && hours > 0 && ratio > 1) bgStyle.backgroundColor = dBg('#fecaca', '#5a1a1a');
+                            else if (wlBarMode === 'number' && hours > 0 && ratio > 0.8) bgStyle.backgroundColor = dBg('#fed7aa', '#5a3a10');
+                            else if (wlBarMode === 'number' && hours > 0 && ratio > 0.6) bgStyle.backgroundColor = dBg('#c7d2fe', '#2a2a60');
+                            else if (wlBarMode === 'number' && hours > 0) bgStyle.backgroundColor = dBg('#bbf7d0', '#1a4028');
                             else if (darkMode) bgStyle.backgroundColor = '#2a2a3e';
-                            const numTextColor = (isDown && !isWE) ? 'text-orange-500' : ratio > 1 ? 'text-red-600 font-bold' : ratio > 0.8 ? 'text-orange-600' : ratio > 0.6 ? 'text-indigo-600 font-medium' : hours > 0 ? 'text-green-700' : 'text-gray-300';
+                            const numTextColor = (isDown && !isWE) ? 'text-orange-500' : ratio > 1 ? 'text-red-700 font-bold' : ratio > 0.8 ? 'text-orange-700 font-bold' : ratio > 0.6 ? 'text-indigo-700 font-bold' : hours > 0 ? 'text-green-700 font-bold' : 'text-gray-300';
                             
                             return (
                               <div 
