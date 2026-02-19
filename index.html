@@ -8171,7 +8171,7 @@ const CapacityPlanner = () => {
                   <button onClick={() => setZoomLevel(Math.min(250, zoomLevel + 25))} className="w-5 h-5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold flex items-center justify-center" title="Breiter">+</button>
                   <div className="w-px h-4 bg-gray-200 mx-1" />
                   <span className="text-[9px] text-gray-400">Höhe</span>
-                  <button onClick={() => setWorkloadZoom(z => Math.max(70, z - 10))} className="w-5 h-5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold flex items-center justify-center" title="Zeilen verkleinern">−</button>
+                  <button onClick={() => setWorkloadZoom(z => Math.max(50, z - 10))} className="w-5 h-5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold flex items-center justify-center" title="Zeilen verkleinern">−</button>
                   <span className="text-[10px] text-gray-500 w-7 text-center">{workloadZoom}%</span>
                   <button onClick={() => setWorkloadZoom(z => Math.min(150, z + 10))} className="w-5 h-5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold flex items-center justify-center" title="Zeilen vergrößern">+</button>
                   <div className="w-px h-4 bg-gray-200 mx-1" />
@@ -8184,7 +8184,7 @@ const CapacityPlanner = () => {
                     <button key={d} onClick={() => setWlDecimals(d)} className={`w-4 h-4 rounded text-[9px] font-medium flex items-center justify-center ${wlDecimals === d ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`} title={`${d} Dezimalstellen`}>{d}</button>
                   ))}
                   <div className="w-px h-4 bg-gray-200 mx-1" />
-                  <button onClick={() => setWlBarMode(m => m === 'bar' ? 'number' : m === 'number' ? 'indicator' : 'bar')} className={`px-1.5 h-5 rounded text-[9px] font-medium flex items-center gap-1 ${wlBarMode === 'bar' ? 'bg-indigo-600 text-white' : wlBarMode === 'indicator' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`} title={wlBarMode === 'bar' ? 'Balken (→ Zahlen)' : wlBarMode === 'number' ? 'Zahlen (→ Indikator)' : 'Indikator (→ Balken)'}>
+                  <button onClick={() => setWlBarMode(m => { const next = m === 'bar' ? 'number' : m === 'number' ? 'indicator' : 'bar'; if (next === 'indicator') setWorkloadZoom(60); else if (m === 'indicator') setWorkloadZoom(90); return next; })} className={`px-1.5 h-5 rounded text-[9px] font-medium flex items-center gap-1 ${wlBarMode === 'bar' ? 'bg-indigo-600 text-white' : wlBarMode === 'indicator' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`} title={wlBarMode === 'bar' ? 'Balken (→ Zahlen)' : wlBarMode === 'number' ? 'Zahlen (→ Indikator)' : 'Indikator (→ Balken)'}>
                     {wlBarMode === 'bar' ? '📊' : wlBarMode === 'number' ? '🔢' : '🟢'}
                   </button>
                   {/* Detailgrad-Buttons */}
