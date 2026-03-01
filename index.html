@@ -3279,7 +3279,7 @@ const CapacityPlanner = () => {
                 return (
                   <div key={t.id} onMouseDown={(e) => { if (e.button === 0) { e.preventDefault(); setDraggedTask({ task: t, startX: e.clientX, startY: e.clientY }); } }}
                     onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setSpOverlayMenu({ x: e.clientX, y: e.clientY, type: 'sp', projectId: t.projectId, projectName: proj?.name || '?', userId: t.userId }); }}
-                    style={{ left: diff * DW, width: days * DW, bottom: bottomPos, height: heightVal, backgroundColor: (proj?.color || '#94a3b8') + 'cc', border: `2px dashed ${proj?.color || '#94a3b8'}`, backgroundImage: `repeating-linear-gradient(135deg, transparent, transparent 6px, ${proj?.color || '#94a3b8'}30 6px, ${proj?.color || '#94a3b8'}30 8px)` }}
+                    style={{ left: diff * DW, width: days * DW, bottom: bottomPos, height: heightVal, backgroundColor: (proj?.color || '#94a3b8') + '70', border: `2px dashed ${proj?.color || '#94a3b8'}`, backgroundImage: `repeating-linear-gradient(135deg, transparent, transparent 6px, ${proj?.color || '#94a3b8'}30 6px, ${proj?.color || '#94a3b8'}30 8px)` }}
                     className="absolute rounded-lg shadow-lg flex flex-col items-center justify-center text-white font-bold cursor-move group">
                     <div onMouseDown={(e) => { e.stopPropagation(); setResizingTask({ task: t, dir: 'top', startX: e.clientX, startY: e.clientY, origEnd: t.endHour }); }}
                       className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-black/20 z-10" />
@@ -3396,7 +3396,7 @@ const CapacityPlanner = () => {
                     onClick={() => { setShowBPv2(true); setShowDisposition(false); setShowDashboard(false); setShowProjectDashboard(false); setShowProjectPlanning(false); setShowResourceCockpit(false); }}
                     onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setSpOverlayMenu({ x: e.clientX, y: e.clientY, type: 'dispo', projectId: cell.projectId, projectName: cell.label, userId: user.id }); }}
                   >
-                    <div className="w-full h-full rounded" style={{ backgroundColor: (cell.color || '#94a3b8') + '20', border: `2px dotted ${cell.color || '#94a3b8'}`, backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 3px, ${cell.color || '#94a3b8'}25 3px, ${cell.color || '#94a3b8'}25 5px)` }} />
+                    <div className="w-full h-full rounded" style={{ backgroundColor: (cell.color || '#94a3b8') + '20', border: `2px dotted ${cell.color || '#94a3b8'}`, backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 6px, ${cell.color || '#94a3b8'}25 6px, ${cell.color || '#94a3b8'}25 8px)` }} />
                     <div className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden px-1" style={{ fontSize: 10, lineHeight: '12px' }}>
                       <span className="truncate w-full text-center font-bold" style={{ color: cell.color || '#94a3b8' }}>✏️ {cell.label}</span>
                     </div>
@@ -5378,8 +5378,8 @@ const CapacityPlanner = () => {
         return workload;
       }, [workPackages, holidays, tasks, projects, users, dispositions]);
       
-      // Tageskapazität einer Ressource (Schichten × Stunden pro Schicht)
-      const getResourceDailyCapacity = (res) => (res.schichtmodell || 1) * (res.stundenProSchicht || 8);
+      // Tageskapazität einer Ressource (Stunden pro Schicht, unabhängig vom Schichtmodell)
+      const getResourceDailyCapacity = (res) => (res.stundenProSchicht || 8);
       
       // Stunden einer Ressource für ein WP
       const getResourceHours = (wp, resId) => (wp.resourceHours || {})[resId] || 0;
@@ -10550,7 +10550,7 @@ const CapacityPlanner = () => {
                   {(() => {
                     const rows = [];
                     const WLR = isBPv2Mode ? ROW_HEIGHT : Math.round(ROW_HEIGHT * workloadZoom / 100);
-                    const WLR_SUM = isBPv2Mode ? Math.round(WLR * 1.8) : (wlBarMode === 'bar' ? Math.round(WLR * 1.4) : WLR);
+                    const WLR_SUM = isBPv2Mode ? Math.round(WLR * 1.44) : (wlBarMode === 'bar' ? Math.round(WLR * 1.4) : WLR);
                     const WLR_WP = isBPv2Mode ? Math.round(WLR * 0.56) : Math.round(WLR * 0.8);
                     const WLR_GRP = WLR_SUM;
                     const wlFmt = (v) => { const s = v.toFixed(wlDecimals); return wlDecimals === 0 ? s : s.replace(/\.?0+$/, '') || '0'; };
@@ -10867,7 +10867,7 @@ const CapacityPlanner = () => {
                               const project = projects.find(p => p.id === wp.projectId);
                               const wpColor = wp.color || project?.color || '#6366f1';
                               rows.push(
-                                <div key={u.id + '_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
+                                <div key={u.id + '_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
                                   <TreeLines level={wpLevel} isLast={isLastItem} parentLines={wpParentLines} />
                                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                     <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: wpColor }} />
@@ -10894,7 +10894,7 @@ const CapacityPlanner = () => {
                             } else {
                               const pp = item;
                               rows.push(
-                                <div key={u.id + '_plan_' + pp.projectId} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
+                                <div key={u.id + '_plan_' + pp.projectId} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
                                   <TreeLines level={wpLevel} isLast={isLastItem} parentLines={wpParentLines} />
                                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                     <span className="flex-shrink-0" style={{ fontSize: 9 }}>📋</span>
@@ -11105,7 +11105,7 @@ const CapacityPlanner = () => {
                                   if (hasMachinist) {
                                     rows.push(
                                       <div key={'cmb_' + r.id + '_machinist'} className="flex items-center gap-1.5 pr-2 border-b"
-                                        style={{ height: WLR_WP, backgroundColor: '#06b6d415', borderColor: grpBorder }}>
+                                        style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}>
                                         <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
                                         <span style={{ fontSize: 9 }}>👷</span>
                                         <span className="wl-t-xxs font-bold truncate" style={{ color: '#06b6d4', letterSpacing: '0.03em' }}>Maschinisten-Zuweisung</span>
@@ -11115,7 +11115,7 @@ const CapacityPlanner = () => {
                                   // Section: Projektplanung
                                   if (hasPP) {
                                     rows.push(
-                                      <div key={'cmb_' + r.id + '_sec_pp'} className="flex items-center gap-1.5 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: '#6366f115', borderColor: grpBorder }}>
+                                      <div key={'cmb_' + r.id + '_sec_pp'} className="flex items-center gap-1.5 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}>
                                         <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
                                         <span style={{ fontSize: 9 }}>📐</span>
                                         <span className="wl-t-xxs font-bold truncate" style={{ color: '#6366f1', letterSpacing: '0.03em' }}>Aus Projektplanung</span>
@@ -11128,7 +11128,7 @@ const CapacityPlanner = () => {
                                       const barColor = wp.color || project?.color || '#6366f1';
                                       const resH = getResourceHours(wp, r.id);
                                       rows.push(
-                                        <div key={'cmb_' + r.id + '_pp_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}
+                                        <div key={'cmb_' + r.id + '_pp_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}
                                           onClick={(e) => { e.stopPropagation(); openSidebar(wp.id); }}>
                                           <TreeLines level={itemLevel} isLast={wpIdx === resWPs.length - 1} parentLines={ppParentLines} />
                                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -11168,7 +11168,7 @@ const CapacityPlanner = () => {
                                   })();
                                   if (resSpProjects.length > 0) {
                                     rows.push(
-                                      <div key={'cmb_' + r.id + '_sec_sp'} className="flex items-center gap-1.5 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: '#f59e0b15', borderColor: grpBorder }}>
+                                      <div key={'cmb_' + r.id + '_sec_sp'} className="flex items-center gap-1.5 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}>
                                         <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
                                         <span style={{ fontSize: 9 }}>📋</span>
                                         <span className="wl-t-xxs font-bold truncate" style={{ color: '#f59e0b', letterSpacing: '0.03em' }}>Aus Schnellplanung</span>
@@ -11178,7 +11178,7 @@ const CapacityPlanner = () => {
                                     const spParentLines = [...wpParentLines, true]; // SP not last (BP follows)
                                     resSpProjects.forEach((sp, si) => {
                                       rows.push(
-                                        <div key={'cmb_' + r.id + '_sp_' + (sp.projectId || si)} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
+                                        <div key={'cmb_' + r.id + '_sp_' + (sp.projectId || si)} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
                                           <TreeLines level={itemLevel} isLast={si === resSpProjects.length - 1} parentLines={spParentLines} />
                                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                             <span className="flex-shrink-0" style={{ fontSize: 9 }}>📋</span>
@@ -11200,16 +11200,17 @@ const CapacityPlanner = () => {
                                   const resBpList = Object.values(resBpProjects).sort((a, b) => (a.label || '').localeCompare(b.label || ''));
                                   rows.push(
                                     <div key={'cmb_' + r.id + '_sec_bp'} className="flex items-center gap-1.5 pr-2 border-b"
-                                      style={{ height: WLR_WP, backgroundColor: '#10b98115', borderColor: grpBorder }}
+                                      style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}
                                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; e.currentTarget.style.backgroundColor = '#10b98130'; }}
-                                      onDragLeave={(e) => { e.currentTarget.style.backgroundColor = '#10b98115'; }}
+                                      onDragLeave={(e) => { e.currentTarget.style.backgroundColor = dm ? '#2a2a3e' : '#fafafa'; }}
                                       onDrop={(e) => {
-                                        e.preventDefault(); e.currentTarget.style.backgroundColor = '#10b98115';
+                                        e.preventDefault(); e.currentTarget.style.backgroundColor = dm ? '#2a2a3e' : '#fafafa';
                                         if (!bpv2DragProject) return;
                                         const proj = bpv2DragProject;
                                         const today = formatDate(new Date());
                                         saveDispositions([...dispositions, { userId: 'res_' + r.id, date: today, type: proj._type || 'assignment', projectId: proj.id, label: proj.name, color: proj.color || '#888' }]);
-                                      }}>
+                                      }}
+                                      onContextMenu={(e) => { e.preventDefault(); setBpv2ContextMenu({ x: e.clientX, y: e.clientY, userId: 'res_' + r.id, date: formatDate(new Date()), hours: 0, dailyCapacity: 0, details: [], dispoEntries: [], isVac: false, isResource: true, resourceId: r.id, resourceName: r.name }); }}>
                                       <TreeLines level={sectionLevel} isLast={true} parentLines={wpParentLines} />
                                       <span style={{ fontSize: 9 }}>✏️</span>
                                       <span className="wl-t-xxs font-bold truncate" style={{ color: '#10b981', letterSpacing: '0.03em' }}>Betriebsplanung</span>
@@ -11219,7 +11220,7 @@ const CapacityPlanner = () => {
                                   const bpResParentLines = [...wpParentLines, false]; // BP is last section
                                   resBpList.forEach((bp, bi) => {
                                     rows.push(
-                                      <div key={'cmb_' + r.id + '_bp_' + (bp.projectId || bi)} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
+                                      <div key={'cmb_' + r.id + '_bp_' + (bp.projectId || bi)} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
                                         <TreeLines level={itemLevel} isLast={false} parentLines={bpResParentLines} />
                                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                           <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: bp.color, border: '1px dotted ' + (dm ? '#666' : '#bbb') }} />
@@ -11231,17 +11232,18 @@ const CapacityPlanner = () => {
                                   });
                                   // + Drop row
                                   rows.push(
-                                    <div key={'cmb_' + r.id + '_bp_add'} className="flex items-center gap-1.5 pr-2 border-b"
-                                      style={{ height: WLR_WP, backgroundColor: dm ? '#252540' : '#f8fdf8', borderColor: grpBorder, opacity: 0.5 }}
+                                    <div key={'cmb_' + r.id + '_bp_add'} className="flex items-center gap-1.5 pr-2 border-b cursor-pointer"
+                                      style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, opacity: 0.5 }}
                                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; e.currentTarget.style.opacity = '1'; e.currentTarget.style.backgroundColor = '#10b98120'; }}
-                                      onDragLeave={(e) => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.backgroundColor = dm ? '#252540' : '#f8fdf8'; }}
+                                      onDragLeave={(e) => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.backgroundColor = dm ? '#1e1e30' : '#fafafa'; }}
                                       onDrop={(e) => {
                                         e.preventDefault(); e.currentTarget.style.opacity = '0.5';
                                         if (!bpv2DragProject) return;
                                         const proj = bpv2DragProject;
                                         const today = formatDate(new Date());
                                         saveDispositions([...dispositions, { userId: 'res_' + r.id, date: today, type: proj._type || 'assignment', projectId: proj.id, label: proj.name, color: proj.color || '#888' }]);
-                                      }}>
+                                      }}
+                                      onContextMenu={(e) => { e.preventDefault(); setBpv2ContextMenu({ x: e.clientX, y: e.clientY, userId: 'res_' + r.id, date: formatDate(new Date()), hours: 0, dailyCapacity: 0, details: [], dispoEntries: [], isVac: false, isResource: true, resourceId: r.id, resourceName: r.name }); }}>
                                       <TreeLines level={itemLevel} isLast={true} parentLines={bpResParentLines} />
                                       <span className="wl-t-tiny" style={{ color: '#10b981' }}>+ Hier droppen…</span>
                                     </div>
@@ -11258,7 +11260,7 @@ const CapacityPlanner = () => {
                                   const resH = getResourceHours(wp, r.id);
                                   const isLastWP = !showAllRes && hiddenWPCount > 0 ? false : wpIdx === visWPs.length - 1;
                                   rows.push(
-                                    <div key={'cmb_' + r.id + '_wp_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}
+                                    <div key={'cmb_' + r.id + '_wp_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}
                                       onContextMenu={(e) => { e.preventDefault(); setWorkloadContextMenu({ x: e.clientX, y: e.clientY, wpId: wp.id, resId: r.id, resName: r.name, wpName: wp.name, projectName: project?.name, locked: wp.locked }); }}
                                       onClick={(e) => { e.stopPropagation(); openSidebar(wp.id); }}
                                     >
@@ -11274,7 +11276,7 @@ const CapacityPlanner = () => {
                                 });
                                 if (!showAllRes && hiddenWPCount > 0) {
                                   rows.push(
-                                    <div key={'cmb_' + r.id + '_more'} className="flex items-center gap-0 pr-2 border-b cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder }}
+                                    <div key={'cmb_' + r.id + '_more'} className="flex items-center gap-0 pr-2 border-b cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder }}
                                       onClick={() => setResWPShowAll(prev => ({...prev, ['res_' + r.id]: true}))}
                                     >
                                       <TreeLines level={3} isLast={true} parentLines={wpParentLines} />
@@ -11284,7 +11286,7 @@ const CapacityPlanner = () => {
                                 }
                                 if (doneResWPs > 0) {
                                   rows.push(
-                                    <div key={'cmb_' + r.id + '_done'} className="flex items-center gap-0 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder }}>
+                                    <div key={'cmb_' + r.id + '_done'} className="flex items-center gap-0 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder }}>
                                       <TreeLines level={3} isLast={true} parentLines={wpParentLines} />
                                       <span className="wl-t-xs" style={{ color: dm ? '#4b5563' : '#d1d5db' }}>✓ {doneResWPs} erledigt</span>
                                     </div>
@@ -11403,7 +11405,7 @@ const CapacityPlanner = () => {
                                   const barColor = wp.color || project?.color || '#6366f1';
                                   const resH = getResourceHours(wp, r.id);
                                   rows.push(
-                                    <div key={r.id + '_pp_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}
+                                    <div key={r.id + '_pp_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}
                                       onClick={(e) => { e.stopPropagation(); openSidebar(wp.id); }}>
                                       <TreeLines level={itemLevel} isLast={wpIdx === resWPs.length - 1} parentLines={ppParentLines} />
                                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -11454,7 +11456,7 @@ const CapacityPlanner = () => {
                                 const spParentLines = [...wpParentLines, true]; // SP not last
                                 resSpProjects2.forEach((sp, si) => {
                                   rows.push(
-                                    <div key={r.id + '_sp_' + (sp.projectId || si)} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
+                                    <div key={r.id + '_sp_' + (sp.projectId || si)} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
                                       <TreeLines level={itemLevel} isLast={si === resSpProjects2.length - 1} parentLines={spParentLines} />
                                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                         <span className="flex-shrink-0" style={{ fontSize: 9 }}>📋</span>
@@ -11477,17 +11479,18 @@ const CapacityPlanner = () => {
                               const resBpList = Object.values(resBpProj2).sort((a, b) => (a.label || '').localeCompare(b.label || ''));
                               rows.push(
                                 <div key={r.id + '_sec_bp'} className="flex items-center gap-1.5 pr-2 border-b"
-                                  style={{ height: WLR_WP, backgroundColor: '#10b98115', borderColor: grpBorder }}
+                                  style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}
                                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; e.currentTarget.style.backgroundColor = '#10b98130'; }}
-                                  onDragLeave={(e) => { e.currentTarget.style.backgroundColor = '#10b98115'; }}
+                                  onDragLeave={(e) => { e.currentTarget.style.backgroundColor = dm ? '#2a2a3e' : '#fafafa'; }}
                                   onDrop={(e) => {
-                                    e.preventDefault(); e.currentTarget.style.backgroundColor = '#10b98115';
+                                    e.preventDefault(); e.currentTarget.style.backgroundColor = dm ? '#2a2a3e' : '#fafafa';
                                     if (!bpv2DragProject) return;
                                     const proj = bpv2DragProject;
                                     const today = formatDate(new Date());
                                     const entry = { userId: 'res_' + r.id, date: today, type: proj._type || 'assignment', projectId: proj.id, label: proj.name, color: proj.color || '#888' };
                                     saveDispositions([...dispositions, entry]);
-                                  }}>
+                                  }}
+                                  onContextMenu={(e) => { e.preventDefault(); setBpv2ContextMenu({ x: e.clientX, y: e.clientY, userId: 'res_' + r.id, date: formatDate(new Date()), hours: 0, dailyCapacity: 0, details: [], dispoEntries: [], isVac: false, isResource: true, resourceId: r.id, resourceName: r.name }); }}>
                                   <TreeLines level={sectionLevel} isLast={true} parentLines={wpParentLines} />
                                   <span style={{ fontSize: 9 }}>✏️</span>
                                   <span className="wl-t-xxs font-bold truncate" style={{ color: '#10b981', letterSpacing: '0.03em' }}>Betriebsplanung</span>
@@ -11497,7 +11500,7 @@ const CapacityPlanner = () => {
                               const bpStandaloneParentLines = [...wpParentLines, false]; // BP is last
                               resBpList.forEach((bp, bi) => {
                                 rows.push(
-                                  <div key={r.id + '_bp_' + (bp.projectId || bi)} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
+                                  <div key={r.id + '_bp_' + (bp.projectId || bi)} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
                                     <TreeLines level={itemLevel} isLast={false} parentLines={bpStandaloneParentLines} />
                                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                       <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: bp.color, border: '1px dotted ' + (dm ? '#666' : '#bbb') }} />
@@ -11510,16 +11513,17 @@ const CapacityPlanner = () => {
                               // + Drop row
                               rows.push(
                                 <div key={r.id + '_bp_add'} className="flex items-center gap-1.5 pr-2 border-b cursor-pointer"
-                                  style={{ height: WLR_WP, backgroundColor: dm ? '#252540' : '#f8fdf8', borderColor: grpBorder, opacity: 0.5 }}
+                                  style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, opacity: 0.5 }}
                                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; e.currentTarget.style.opacity = '1'; e.currentTarget.style.backgroundColor = '#10b98120'; }}
-                                  onDragLeave={(e) => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.backgroundColor = dm ? '#252540' : '#f8fdf8'; }}
+                                  onDragLeave={(e) => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.backgroundColor = dm ? '#1e1e30' : '#fafafa'; }}
                                   onDrop={(e) => {
                                     e.preventDefault(); e.currentTarget.style.opacity = '0.5';
                                     if (!bpv2DragProject) return;
                                     const proj = bpv2DragProject;
                                     const today = formatDate(new Date());
                                     saveDispositions([...dispositions, { userId: 'res_' + r.id, date: today, type: proj._type || 'assignment', projectId: proj.id, label: proj.name, color: proj.color || '#888' }]);
-                                  }}>
+                                  }}
+                                  onContextMenu={(e) => { e.preventDefault(); setBpv2ContextMenu({ x: e.clientX, y: e.clientY, userId: 'res_' + r.id, date: formatDate(new Date()), hours: 0, dailyCapacity: 0, details: [], dispoEntries: [], isVac: false, isResource: true, resourceId: r.id, resourceName: r.name }); }}>
                                   <TreeLines level={itemLevel} isLast={true} parentLines={bpStandaloneParentLines} />
                                   <span className="wl-t-tiny" style={{ color: '#10b981' }}>+ Hier droppen…</span>
                                 </div>
@@ -11536,7 +11540,7 @@ const CapacityPlanner = () => {
                               const resH = getResourceHours(wp, r.id);
                               const isLastWP = !showAllRes2 && hiddenWPC2 > 0 ? false : wpIdx === visWPs2.length - 1;
                               rows.push(
-                                <div key={r.id + '_wp_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}
+                                <div key={r.id + '_wp_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}
                                   onContextMenu={(e) => { e.preventDefault(); setWorkloadContextMenu({ x: e.clientX, y: e.clientY, wpId: wp.id, resId: r.id, resName: r.name, wpName: wp.name, projectName: project?.name, locked: wp.locked }); }}
                                   onClick={(e) => { e.stopPropagation(); openSidebar(wp.id); }}
                                 >
@@ -11552,7 +11556,7 @@ const CapacityPlanner = () => {
                             });
                             if (!showAllRes2 && hiddenWPC2 > 0) {
                               rows.push(
-                                <div key={r.id + '_more'} className="flex items-center gap-0 pr-2 border-b cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder }}
+                                <div key={r.id + '_more'} className="flex items-center gap-0 pr-2 border-b cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder }}
                                   onClick={() => setResWPShowAll(prev => ({...prev, ['res_' + r.id]: true}))}
                                 >
                                   <TreeLines level={2} isLast={doneResWPs2 === 0} parentLines={wpParentLines} />
@@ -11562,7 +11566,7 @@ const CapacityPlanner = () => {
                             }
                             if (doneResWPs2 > 0) {
                               rows.push(
-                                <div key={r.id + '_done'} className="flex items-center gap-0 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: dm ? '#2e2e44' : '#fafafa', borderColor: grpBorder }}>
+                                <div key={r.id + '_done'} className="flex items-center gap-0 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder }}>
                                   <TreeLines level={2} isLast={true} parentLines={wpParentLines} />
                                   <span className="wl-t-xs" style={{ color: dm ? '#4b5563' : '#d1d5db' }}>✓ {doneResWPs2} erledigt</span>
                                 </div>
@@ -11695,7 +11699,7 @@ const CapacityPlanner = () => {
                       {(() => {
                       const gridRows = [];
                       const WLR = isBPv2Mode ? ROW_HEIGHT : Math.round(ROW_HEIGHT * workloadZoom / 100);
-                      const WLR_SUM = isBPv2Mode ? Math.round(WLR * 1.8) : (wlBarMode === 'bar' ? Math.round(WLR * 1.4) : WLR);
+                      const WLR_SUM = isBPv2Mode ? Math.round(WLR * 1.44) : (wlBarMode === 'bar' ? Math.round(WLR * 1.4) : WLR);
                       const WLR_WP = isBPv2Mode ? Math.round(WLR * 0.56) : Math.round(WLR * 0.8);
                       const WLR_GRP = WLR_SUM;
                       const wlFmt = (v) => { const s = v.toFixed(wlDecimals); return wlDecimals === 0 ? s : s.replace(/\.?0+$/, '') || '0'; };
@@ -11709,8 +11713,8 @@ const CapacityPlanner = () => {
                       const getBarStyle = (type, barColor) => {
                         const base = { borderRadius: 6 };
                         if (type === 'pp') return { ...base, backgroundColor: barColor + '40', border: `1.5px solid ${barColor}` };
-                        if (type === 'bp') return { ...base, backgroundColor: barColor + '20', border: `2px dotted ${barColor}`, backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 4px, ${barColor}30 4px, ${barColor}30 6px)` };
-                        if (type === 'sp') return { ...base, backgroundColor: barColor + '25', border: `2px dashed ${barColor}`, backgroundImage: `repeating-linear-gradient(135deg, transparent, transparent 4px, ${barColor}30 4px, ${barColor}30 6px)` };
+                        if (type === 'bp') return { ...base, backgroundColor: barColor + '20', border: `2px dotted ${barColor}`, backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 6px, ${barColor}30 6px, ${barColor}30 8px)` };
+                        if (type === 'sp') return { ...base, backgroundColor: barColor + '15', border: `2px dashed ${barColor}`, backgroundImage: `repeating-linear-gradient(135deg, transparent, transparent 4px, ${barColor}30 4px, ${barColor}30 6px)` };
                         return base;
                       };
 
@@ -11826,7 +11830,9 @@ const CapacityPlanner = () => {
                                   if (isWE) return;
                                   e.preventDefault();
                                   if (isBPv2Mode) {
-                                    setBpv2Selection({ userId: u.id, startDate: ds, endDate: ds });
+                                    if (!(bpv2Selection && bpv2Selection.userId === u.id && ds >= bpv2Selection.startDate && ds <= bpv2Selection.endDate)) {
+                                      setBpv2Selection({ userId: u.id, startDate: ds, endDate: ds });
+                                    }
                                     setBpv2ContextMenu({ x: e.clientX, y: e.clientY, userId: u.id, date: ds, hours, dailyCapacity, details: data?.details || [], dispoEntries: cellDispoEntries, isVac, vacType });
                                   } else {
                                     setVacationTypePicker({ x: e.clientX, y: e.clientY, userId: u.id, dates: [ds], hasExisting: isVac });
@@ -11874,27 +11880,27 @@ const CapacityPlanner = () => {
                                         })()}
                                         {/* B: PP+SP horizontal bar */}
                                         {(() => {
-                                          const bpDotH = 10;
-                                          const machH = cellShifts.length > 0 ? 16 : 0;
                                           const barH = 14;
-                                          const barBottom = bpDotH + 14;
+                                          const topZone = WLR_WP + 2;
+                                          const bottomZone = 24;
+                                          const barBottom = Math.round(bottomZone + Math.max(0, WLR_SUM - topZone - bottomZone - barH) / 2);
                                           const ratio = dailyCapacity > 0 ? ppSpHours / dailyCapacity : 0;
                                           const normalPct = Math.min(ratio, 1) * 100;
                                           const overPct = ratio > 1 ? Math.min((ratio - 1) / ratio * 100, 100) : 0;
                                           const overH = Math.max(0, ppSpHours - dailyCapacity);
                                           const barColor = overH > 0 ? '#ef4444' : '#6366f1';
-                                          return ppSpHours > 0 ? (
+                                          return !isWE && !isHol ? (
                                             <React.Fragment>
-                                              {/* Number just above bar */}
-                                              <div className="absolute left-0 right-0 pointer-events-none z-[2] flex justify-center" style={{ bottom: barBottom + barH + 1 }}>
-                                                <span className="font-bold" style={{ fontSize: bpv2FontSize, color: barColor }}>{wlFmt(ppSpHours)}{dailyCapacity > 0 ? '/' + wlFmt(dailyCapacity) : ''}</span>
-                                              </div>
-                                              {/* Horizontal bar */}
-                                              <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 2, bottom: barBottom, height: barH, borderRadius: 4, overflow: 'hidden', backgroundColor: dm ? '#3a3a4e' : '#e8e8e8' }}>
-                                                <div style={{ width: `${Math.min(normalPct, 100)}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overPct > 0 ? '4px 0 0 4px' : 4 }} />
+                                              {/* Horizontal bar – shortened for number */}
+                                              <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 62, bottom: barBottom, height: barH, borderRadius: 4, overflow: 'hidden', backgroundColor: dm ? '#3a3a4e' : '#e8e8e8' }}>
+                                                {normalPct > 0 && <div style={{ width: `${Math.min(normalPct, 100)}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overPct > 0 ? '4px 0 0 4px' : 4 }} />}
                                                 {overPct > 0 && (
                                                   <div style={{ width: `${overPct}%`, height: '100%', backgroundColor: '#ef4444', borderRadius: '0 4px 4px 0' }} />
                                                 )}
+                                              </div>
+                                              {/* Number at end of bar */}
+                                              <div className="absolute pointer-events-none z-[2] flex items-center justify-end" style={{ right: 1, bottom: barBottom, height: barH }}>
+                                                <span className="font-bold" style={{ fontSize: bpv2FontSize - 1, color: ppSpHours > 0 ? barColor : (dm ? '#555' : '#aaa') }}>{wlFmt(ppSpHours)}{dailyCapacity > 0 ? '/' + wlFmt(dailyCapacity) : ''}h</span>
                                               </div>
                                             </React.Fragment>
                                           ) : null;
@@ -11903,7 +11909,7 @@ const CapacityPlanner = () => {
                                         {cellAssignments.length > 0 && (
                                           <div className="absolute bottom-[6px] left-[1px] right-[1px] flex gap-[2px] flex-wrap justify-start content-end pointer-events-none z-[3]" style={{ height: 30 }}>
                                             {cellAssignments.slice(0, 8).map((ent, ei) => (
-                                              <div key={ei} className="rounded" style={{ width: 14, height: 14, backgroundColor: ent.color || '#888', border: `1px solid ${dm ? '#555' : '#fff'}`, boxShadow: `0 0 2px ${ent.color || '#888'}80` }} title={ent.label} />
+                                              <div key={ei} className="rounded" style={{ width: 14, height: 14, backgroundColor: ent.color || '#888', border: `1px solid ${dm ? '#555' : '#fff'}` }} title={ent.label} />
                                             ))}
                                           </div>
                                         )}
@@ -11940,16 +11946,16 @@ const CapacityPlanner = () => {
                                 <React.Fragment>
                                 {wlBarMode === 'bar' ? (
                                   <React.Fragment>
-                                    {hours > 0 && !isWE && !isHol && !isVac ? (
+                                    {!isWE && !isHol && !isVac ? (
                                       <React.Fragment>
-                                        <div className="absolute left-0 right-0 pointer-events-none z-[2] flex justify-center" style={{ bottom: 18 + 2 + 14 + 1 }}>
-                                          <span className="font-bold" style={{ fontSize: 9, color: overPct > 0 ? '#ef4444' : '#6366f1' }}>{wlFmt(hours)}{dailyCapacity > 0 ? '/' + wlFmt(dailyCapacity) : ''}</span>
-                                        </div>
-                                        <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 2, bottom: 18 + 2, height: 14, borderRadius: 4, overflow: 'hidden', backgroundColor: darkMode ? '#3a3a4e' : '#e8e8e8' }}>
-                                          <div style={{ width: `${dailyCapacity > 0 ? Math.min(Math.min(hours, dailyCapacity) / dailyCapacity * 100, 100) : 50}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overPct > 0 ? '4px 0 0 4px' : 4 }} />
+                                        <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 62, bottom: 18 + 2, height: 14, borderRadius: 4, overflow: 'hidden', backgroundColor: darkMode ? '#3a3a4e' : '#e8e8e8' }}>
+                                          {hours > 0 && <div style={{ width: `${dailyCapacity > 0 ? Math.min(Math.min(hours, dailyCapacity) / dailyCapacity * 100, 100) : 50}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overPct > 0 ? '4px 0 0 4px' : 4 }} />}
                                           {overPct > 0 && (
                                             <div style={{ width: `${Math.min(overPct, 50)}%`, height: '100%', backgroundColor: '#ef4444', borderRadius: '0 4px 4px 0' }} />
                                           )}
+                                        </div>
+                                        <div className="absolute pointer-events-none z-[2] flex items-center justify-end" style={{ right: 1, bottom: 18 + 2, height: 14 }}>
+                                          <span className="font-bold" style={{ fontSize: 9, color: hours > 0 ? (overPct > 0 ? '#ef4444' : '#6366f1') : (darkMode ? '#555' : '#aaa') }}>{wlFmt(hours)}{dailyCapacity > 0 ? '/' + wlFmt(dailyCapacity) : ''}h</span>
                                         </div>
                                       </React.Fragment>
                                     ) : isVac && !isWE ? (
@@ -12020,18 +12026,18 @@ const CapacityPlanner = () => {
                             return <div key={i} className="flex-shrink-0 border-r border-b text-center wl-t-tiny text-[8px] flex items-center justify-center relative overflow-hidden" style={{ width: DAY_WIDTH, height: WLR_SUM, backgroundColor: wlBarMode === 'number' ? (numBg || cellBg) : cellBg, borderColor: grpBorder }}>
                               {wlBarMode === 'bar' ? (
                                 <React.Fragment>
-                                  {total > 0 && !isWE && !isHol ? (
+                                  {!isWE && !isHol ? (
                                     <React.Fragment>
-                                      {/* Number above bar */}
-                                      <div className="absolute left-0 right-0 pointer-events-none z-[2] flex justify-center" style={{ bottom: 18 + 2 + 14 + 1 }}>
-                                        <span className="font-bold" style={{ fontSize: isBPv2Mode ? bpv2FontSize : 9, color: overHours > 0 ? '#ef4444' : '#6366f1' }}>{wlFmt(total)}{totalCap > 0 ? '/' + wlFmt(totalCap) : ''}</span>
-                                      </div>
-                                      {/* Horizontal bar */}
-                                      <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 2, bottom: 18 + 2, height: 14, borderRadius: 4, overflow: 'hidden', backgroundColor: darkMode ? '#3a3a4e' : '#e8e8e8' }}>
-                                        <div style={{ width: `${totalCap > 0 ? Math.min(normalHours / totalCap * 100, 100) : 50}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overHours > 0 ? '4px 0 0 4px' : 4 }} />
+                                      {/* Horizontal bar – shortened for number */}
+                                      <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 62, bottom: 18 + 2, height: 14, borderRadius: 4, overflow: 'hidden', backgroundColor: darkMode ? '#3a3a4e' : '#e8e8e8' }}>
+                                        {total > 0 && <div style={{ width: `${totalCap > 0 ? Math.min(normalHours / totalCap * 100, 100) : 50}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overHours > 0 ? '4px 0 0 4px' : 4 }} />}
                                         {overHours > 0 && totalCap > 0 && (
                                           <div style={{ width: `${Math.min(overHours / total * 100, 100)}%`, height: '100%', backgroundColor: '#ef4444', borderRadius: '0 4px 4px 0' }} />
                                         )}
+                                      </div>
+                                      {/* Number at end of bar */}
+                                      <div className="absolute pointer-events-none z-[2] flex items-center justify-end" style={{ right: 1, bottom: 18 + 2, height: 14 }}>
+                                        <span className="font-bold" style={{ fontSize: isBPv2Mode ? bpv2FontSize - 1 : 9, color: total > 0 ? (overHours > 0 ? '#ef4444' : '#6366f1') : (darkMode ? '#555' : '#aaa') }}>{wlFmt(total)}{totalCap > 0 ? '/' + wlFmt(totalCap) : ''}h</span>
                                       </div>
                                     </React.Fragment>
                                   ) : null}
@@ -12330,6 +12336,9 @@ const CapacityPlanner = () => {
                             
                             const isDragSelected = resDownDrag && resDownDrag.resId === r.id && resDownDrag.endIdx !== undefined &&
                               i >= Math.min(resDownDrag.startIdx, resDownDrag.endIdx) && i <= Math.max(resDownDrag.startIdx, resDownDrag.endIdx) && !isWE;
+                            const resUserId = 'res_' + r.id;
+                            const isBpv2Selected = isBPv2Mode && bpv2Selection && bpv2Selection.userId === resUserId && ds >= bpv2Selection.startDate && ds <= bpv2Selection.endDate;
+                            const isBpv2Selecting = isBPv2Mode && bpv2Selecting && bpv2Selecting.userId === resUserId && ds >= (bpv2Selecting.startDate < bpv2Selecting.endDate ? bpv2Selecting.startDate : bpv2Selecting.endDate) && ds <= (bpv2Selecting.startDate > bpv2Selecting.endDate ? bpv2Selecting.startDate : bpv2Selecting.endDate);
                             
                             // Bar chart calculations
                             const capLinePct = (!isWE && !isHol && !isDown) ? Math.min(90, (resDailyCap / REF_MAX) * 100) : 0;
@@ -12360,20 +12369,47 @@ const CapacityPlanner = () => {
                                 key={i} 
                                 data-rdt-idx={i}
                                 data-rdt-res-id={r.id}
-                                className={`flex-shrink-0 border-r border-b flex ${wlBarMode === 'bar' ? 'items-end' : 'items-center'} justify-center ${!isWE ? 'cursor-cell' : 'cursor-default'} select-none relative overflow-hidden`} 
-                                style={{ width: DAY_WIDTH, height: WLR_SUM, ...bgStyle }} 
+                                className={`flex-shrink-0 border-r border-b flex ${wlBarMode === 'bar' && !isBPv2Mode ? 'items-end' : 'items-center'} justify-center ${!isWE ? 'cursor-cell' : 'cursor-default'} select-none relative overflow-hidden ${isBpv2Selected || isBpv2Selecting ? 'ring-2 ring-inset ring-blue-500 z-[5]' : ''}`}
+                                style={{ width: DAY_WIDTH, height: WLR_SUM, ...bgStyle }}
                                 title={isDown ? `${rdtIcons[downType] || '⛔'} ${rdtLabels[downType] || 'Ausfall'} – ${r.name}` : `${r.name} – ${ds}\nKapazität: ${dailyCapacity}h / Belegt: ${hours}h` + (data?.details?.length ? '\n' + data.details.map(d => `${d.wpName}: ${d.hours.toFixed(1)}h`).join('\n') : '')}
                                 onMouseDown={(e) => {
                                   if (e.button !== 0 || isWE) return;
-                                  if (isBPv2Mode) return;
                                   e.preventDefault();
-                                  setResDownDrag({ resId: r.id, startIdx: i, endIdx: i });
+                                  if (isBPv2Mode) {
+                                    setBpv2Selecting({ userId: resUserId, startDate: ds, endDate: ds });
+                                  } else {
+                                    setResDownDrag({ resId: r.id, startIdx: i, endIdx: i });
+                                  }
+                                }}
+                                onMouseEnter={() => {
+                                  if (isBPv2Mode && bpv2Selecting && bpv2Selecting.userId === resUserId) {
+                                    setBpv2Selecting(prev => ({ ...prev, endDate: ds }));
+                                  }
+                                  if (isBPv2Mode && bpv2DragProject && !isWE) {
+                                    setBpv2DragOver({ userId: resUserId, date: ds });
+                                  }
+                                }}
+                                onMouseUp={() => {
+                                  if (isBPv2Mode && bpv2Selecting) {
+                                    const s = bpv2Selecting.startDate < bpv2Selecting.endDate ? bpv2Selecting.startDate : bpv2Selecting.endDate;
+                                    const e2 = bpv2Selecting.startDate > bpv2Selecting.endDate ? bpv2Selecting.startDate : bpv2Selecting.endDate;
+                                    setBpv2Selection({ userId: bpv2Selecting.userId, startDate: s, endDate: e2 });
+                                    setBpv2Selecting(null);
+                                  }
+                                }}
+                                onClick={() => {
+                                  if (isBPv2Mode && !isWE) {
+                                    setBpv2Selection({ userId: resUserId, startDate: ds, endDate: ds });
+                                  }
                                 }}
                                 onContextMenu={(e) => {
                                   if (isWE) return;
                                   e.preventDefault();
                                   if (isBPv2Mode) {
-                                    setBpv2ContextMenu({ x: e.clientX, y: e.clientY, userId: 'res_' + r.id, date: ds, hours, dailyCapacity, details: data?.details || [], dispoEntries: [], isVac: false, isResource: true, resourceId: r.id, resourceName: r.name });
+                                    if (!(bpv2Selection && bpv2Selection.userId === resUserId && ds >= bpv2Selection.startDate && ds <= bpv2Selection.endDate)) {
+                                      setBpv2Selection({ userId: resUserId, startDate: ds, endDate: ds });
+                                    }
+                                    setBpv2ContextMenu({ x: e.clientX, y: e.clientY, userId: resUserId, date: ds, hours, dailyCapacity, details: data?.details || [], dispoEntries: [], isVac: false, isResource: true, resourceId: r.id, resourceName: r.name });
                                   } else {
                                     setResDownTypePicker({ x: e.clientX, y: e.clientY, resId: r.id, dates: [ds], hasExisting: isDown });
                                   }
@@ -12424,25 +12460,26 @@ const CapacityPlanner = () => {
                                     })()}
                                     {/* Zone B: Horizontal bar + number above */}
                                     {(() => {
-                                      const bpDotH = 10;
                                       const barH = 14;
-                                      const barBottom = bpDotH + 14;
+                                      const topZone = WLR_WP + 2;
+                                      const bottomZone = 24;
+                                      const barBottom = Math.round(bottomZone + Math.max(0, WLR_SUM - topZone - bottomZone - barH) / 2);
                                       const cap = resDailyCap;
                                       const ratio = cap > 0 ? hours / cap : 0;
                                       const normalPct = Math.min(ratio, 1) * 100;
                                       const overPct = ratio > 1 ? Math.min((ratio - 1) / ratio * 100, 100) : 0;
                                       const overAmt = Math.max(0, hours - cap);
                                       const numColor = overAmt > 0 ? '#ef4444' : '#6366f1';
-                                      return hours > 0 ? (
+                                      return !isWE && !isHol ? (
                                         <React.Fragment>
-                                          <div className="absolute left-0 right-0 pointer-events-none z-[2] flex justify-center" style={{ bottom: barBottom + barH + 1 }}>
-                                            <span className="font-bold" style={{ fontSize: bpv2FontSize, color: numColor }}>{wlFmt(hours)}{cap > 0 ? '/' + wlFmt(cap) : ''}</span>
-                                          </div>
-                                          <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 2, bottom: barBottom, height: barH, borderRadius: 4, overflow: 'hidden', backgroundColor: darkMode ? '#3a3a4e' : '#e8e8e8' }}>
-                                            <div style={{ width: `${Math.min(normalPct, 100)}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overPct > 0 ? '4px 0 0 4px' : 4 }} />
+                                          <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 62, bottom: barBottom, height: barH, borderRadius: 4, overflow: 'hidden', backgroundColor: darkMode ? '#3a3a4e' : '#e8e8e8' }}>
+                                            {normalPct > 0 && <div style={{ width: `${Math.min(normalPct, 100)}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overPct > 0 ? '4px 0 0 4px' : 4 }} />}
                                             {overPct > 0 && (
                                               <div style={{ width: `${overPct}%`, height: '100%', backgroundColor: '#ef4444', borderRadius: '0 4px 4px 0' }} />
                                             )}
+                                          </div>
+                                          <div className="absolute pointer-events-none z-[2] flex items-center justify-end" style={{ right: 1, bottom: barBottom, height: barH }}>
+                                            <span className="font-bold" style={{ fontSize: bpv2FontSize - 1, color: hours > 0 ? numColor : (darkMode ? '#555' : '#aaa') }}>{wlFmt(hours)}{cap > 0 ? '/' + wlFmt(cap) : ''}h</span>
                                           </div>
                                         </React.Fragment>
                                       ) : null;
@@ -12453,7 +12490,7 @@ const CapacityPlanner = () => {
                                       return rCellAssignments.length > 0 ? (
                                         <div className="absolute bottom-[6px] left-[1px] right-[1px] flex gap-[2px] flex-wrap justify-start content-end pointer-events-none z-[3]" style={{ height: 30 }}>
                                           {rCellAssignments.slice(0, 8).map((ent, ei) => (
-                                            <div key={ei} className="rounded" style={{ width: 14, height: 14, backgroundColor: ent.color || '#888', border: `1px solid ${darkMode ? '#555' : '#fff'}`, boxShadow: `0 0 2px ${ent.color || '#888'}80` }} title={ent.label} />
+                                            <div key={ei} className="rounded" style={{ width: 14, height: 14, backgroundColor: ent.color || '#888', border: `1px solid ${darkMode ? '#555' : '#fff'}` }} title={ent.label} />
                                           ))}
                                         </div>
                                       ) : null;
@@ -12485,16 +12522,16 @@ const CapacityPlanner = () => {
                                   <React.Fragment>
                                 {wlBarMode === 'bar' ? (
                                   <React.Fragment>
-                                    {hours > 0 && !isWE && !isHol && !isDown ? (
+                                    {!isWE && !isHol && !isDown ? (
                                       <React.Fragment>
-                                        <div className="absolute left-0 right-0 pointer-events-none z-[2] flex justify-center" style={{ bottom: 18 + 2 + 14 + 1 }}>
-                                          <span className="font-bold" style={{ fontSize: 9, color: overPct > 0 ? '#ef4444' : '#6366f1' }}>{wlFmt(hours)}{resDailyCap > 0 ? '/' + wlFmt(resDailyCap) : ''}</span>
-                                        </div>
-                                        <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 2, bottom: 18 + 2, height: 14, borderRadius: 4, overflow: 'hidden', backgroundColor: darkMode ? '#3a3a4e' : '#e8e8e8' }}>
-                                          <div style={{ width: `${resDailyCap > 0 ? Math.min(Math.min(hours, resDailyCap) / resDailyCap * 100, 100) : 50}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overPct > 0 ? '4px 0 0 4px' : 4 }} />
+                                        <div className="absolute pointer-events-none flex flex-row" style={{ left: 2, right: 62, bottom: 18 + 2, height: 14, borderRadius: 4, overflow: 'hidden', backgroundColor: darkMode ? '#3a3a4e' : '#e8e8e8' }}>
+                                          {hours > 0 && <div style={{ width: `${resDailyCap > 0 ? Math.min(Math.min(hours, resDailyCap) / resDailyCap * 100, 100) : 50}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: overPct > 0 ? '4px 0 0 4px' : 4 }} />}
                                           {overPct > 0 && (
                                             <div style={{ width: `${Math.min(overPct, 50)}%`, height: '100%', backgroundColor: '#ef4444', borderRadius: '0 4px 4px 0' }} />
                                           )}
+                                        </div>
+                                        <div className="absolute pointer-events-none z-[2] flex items-center justify-end" style={{ right: 1, bottom: 18 + 2, height: 14 }}>
+                                          <span className="font-bold" style={{ fontSize: 9, color: hours > 0 ? (overPct > 0 ? '#ef4444' : '#6366f1') : (darkMode ? '#555' : '#aaa') }}>{wlFmt(hours)}{resDailyCap > 0 ? '/' + wlFmt(resDailyCap) : ''}h</span>
                                         </div>
                                       </React.Fragment>
                                     ) : isDown && !isWE ? (
@@ -12680,6 +12717,7 @@ const CapacityPlanner = () => {
                                   title={downConflict ? `⚠️ ${hoursPerActiveDay.toFixed(1)}h geplant aber ${rdtLabels[getResourceDownType(r.id, day)] || 'Ausfall'}!` : inRange && isWorkDay ? (isActive ? `${hoursPerActiveDay.toFixed(1)}h – Klick: Tag deaktivieren` : 'Klick: Tag aktivieren') : ''}
                                 >
                                   {isDown && !isWE && <div className="absolute inset-0 pointer-events-none z-[8]" style={{ backgroundColor: getDownOverlayColor(r.id, ds) }} />}
+                                  {!isWE && !isDown && (() => { const _usR = userDispoStatusMap['res_' + r.id + '_' + ds]; const _sfR = getStatusFill(_usR); return _sfR ? <div className="absolute inset-0 pointer-events-none z-[8]" style={{ backgroundColor: _sfR }} /> : null; })()}
                                 </div>
                               );
                             })}
@@ -12759,7 +12797,7 @@ const CapacityPlanner = () => {
                             const sectionRow = (key, color, resId, userId) => (
                               <div key={key} className="flex" style={{ height: WLR_WP }}>
                                 {dayMeta.map((dm, i) => {
-                                  let bg = darkMode ? (color + '22') : (color + '15');
+                                  let bg = darkMode ? '#2a2a3e' : '#fafafa';
                                   if (dm.isWE) bg = dBg('#e5e7eb', '#1a1a2a');
                                   else if (dm.isHol) bg = dBg('#fee2e2', '#4a2020');
                                   const isDown = resId && !dm.isWE && isResourceDown(resId, dm.ds);
@@ -12811,7 +12849,7 @@ const CapacityPlanner = () => {
                                     const staff = resourceStaffingMap[r.id + '_' + ds] || [];
                                     return (
                                       <div key={i} className="wl-bar-cell flex-shrink-0 border-b border-r flex items-center justify-center relative overflow-hidden"
-                                        style={{ width: DAY_WIDTH, height: WLR_WP, borderColor: grpBorder, backgroundColor: dm.isWE ? dBg('#e5e7eb','#1a1a2a') : dm.isHol ? dBg('#fee2e2', '#4a2020') : dBg('#06b6d408', '#2c3848') }}
+                                        style={{ width: DAY_WIDTH, height: WLR_WP, borderColor: grpBorder, backgroundColor: dm.isWE ? dBg('#e5e7eb','#1a1a2a') : dm.isHol ? dBg('#fee2e2', '#4a2020') : (darkMode ? '#1e1e30' : undefined) }}
                                         onDragOver={(e) => { if (!dm.isWE) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } }}
                                         onDrop={(e) => {
                                           e.preventDefault();
@@ -13673,6 +13711,20 @@ const CapacityPlanner = () => {
                     <div className={`border-t my-1 ${dm ? 'border-[#3a3a4e]' : 'border-gray-200'}`} />
                     <button className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 ${dm ? 'hover:bg-[#353550] text-amber-400' : 'hover:bg-amber-50 text-amber-700'}`}
                       onClick={() => { setDayNoteEditor({ userId: cm.userId, date: cm.date }); setBpv2ContextMenu(null); }}>📝 Tagesnotiz</button>
+                    <div className={`border-t my-1 ${dm ? 'border-[#3a3a4e]' : 'border-gray-200'}`} />
+                    <div className={`px-3 py-1 text-[10px] font-bold ${dm ? 'text-gray-500' : 'text-gray-400'}`}>Projekt zuweisen:</div>
+                    {projects.slice(0, 8).map(p => (
+                      <button key={p.id} className={`w-full px-3 py-1 text-left text-xs flex items-center gap-2 ${dm ? 'hover:bg-[#353550] text-gray-300' : 'hover:bg-gray-50 text-gray-600'}`}
+                        onClick={() => {
+                          const entry = { type: 'assignment', projectId: p.id, label: p.name, color: p.color || '#6366f1' };
+                          if (selRange && selRange.userId === cm.userId) fillBpv2Range(cm.userId, selRange.startDate, selRange.endDate, entry);
+                          else setBpv2Dispo(cm.userId, cm.date, entry);
+                          setBpv2ContextMenu(null);
+                        }}>
+                        <div className="w-2.5 h-2.5 rounded flex-shrink-0" style={{ backgroundColor: p.color || '#6366f1' }} />
+                        <span className="truncate">{p.name}</span>
+                      </button>
+                    ))}
                   </React.Fragment>
                 ) : (
                 <React.Fragment>
@@ -13753,6 +13805,49 @@ const CapacityPlanner = () => {
                       );
                     })}
                   </React.Fragment>
+                )}
+                <div className={`border-t my-1 ${dm ? 'border-[#3a3a4e]' : 'border-gray-200'}`} />
+                {/* Status setzen */}
+                <div className={`px-3 py-1 text-[10px] font-bold ${dm ? 'text-gray-500' : 'text-gray-400'}`}>Status setzen:</div>
+                {SPECIAL_TYPES.map(st => {
+                  const spIcons = { urlaub: '🏖️', krank: '🤒', montage: '🔨', schule: '🎓' };
+                  return (
+                    <button key={st.type} className={`w-full px-3 py-1 text-left text-xs flex items-center gap-2 ${dm ? 'hover:bg-[#353550] text-gray-300' : 'hover:bg-gray-50 text-gray-600'}`}
+                      onClick={() => {
+                        const statusTypes = new Set(SPECIAL_TYPES.map(s => s.type));
+                        const rangeStart = (selRange && selRange.userId === cm.userId) ? selRange.startDate : cm.date;
+                        const rangeEnd = (selRange && selRange.userId === cm.userId) ? selRange.endDate : cm.date;
+                        const cleaned = dispositions.filter(d => {
+                          if (d.userId !== cm.userId || !statusTypes.has(d.type)) return true;
+                          return d.date < rangeStart || d.date > rangeEnd;
+                        });
+                        const start = new Date(rangeStart + 'T12:00:00');
+                        const end = new Date(rangeEnd + 'T12:00:00');
+                        for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
+                          if (dt.getDay() === 0 || dt.getDay() === 6) continue;
+                          cleaned.push({ userId: cm.userId, date: formatDate(dt), type: st.type, label: st.label, color: st.color });
+                        }
+                        saveDispositions(cleaned);
+                        setBpv2ContextMenu(null);
+                      }}>
+                      <span>{spIcons[st.type] || '●'}</span>
+                      <span style={{ color: st.color }}>{st.label}</span>
+                      <span className={`ml-auto text-[9px] ${dm ? 'text-gray-600' : 'text-gray-400'}`}>({st.key.toUpperCase()})</span>
+                    </button>
+                  );
+                })}
+                {cm.isVac && (
+                  <button className={`w-full px-3 py-1 text-left text-xs flex items-center gap-2 text-red-500 ${dm ? 'hover:bg-[#353550]' : 'hover:bg-red-50'}`}
+                    onClick={() => {
+                      const statusTypes = new Set(SPECIAL_TYPES.map(s => s.type));
+                      const rangeStart = (selRange && selRange.userId === cm.userId) ? selRange.startDate : cm.date;
+                      const rangeEnd = (selRange && selRange.userId === cm.userId) ? selRange.endDate : cm.date;
+                      saveDispositions(dispositions.filter(d => {
+                        if (d.userId !== cm.userId || !statusTypes.has(d.type)) return true;
+                        return d.date < rangeStart || d.date > rangeEnd;
+                      }));
+                      setBpv2ContextMenu(null);
+                    }}>✕ Status entfernen{selDays > 1 ? ` (${selDays} Tage)` : ''}</button>
                 )}
                 <div className={`border-t my-1 ${dm ? 'border-[#3a3a4e]' : 'border-gray-200'}`} />
                 {/* Quick assign from recent projects */}
@@ -14100,8 +14195,12 @@ const CapacityPlanner = () => {
             <div className={`flex items-center gap-4 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
               <span className="flex items-center gap-1.5"><span className="inline-block w-8 h-4 rounded" style={{ border: '2.5px solid #6366f1', backgroundColor: '#6366f125' }} /> 📐 Projektplanung</span>
               <span className="flex items-center gap-1.5"><span className="inline-block w-8 h-4 rounded" style={{ border: '2.5px dashed #94a3b8', backgroundColor: '#94a3b825' }} /> 📋 Schnellplanung</span>
-              <span className="flex items-center gap-1.5"><span className="inline-block w-8 h-4 rounded" style={{ border: '2.5px dotted #f97316', backgroundColor: '#f9731610' }} /> ✏️ Betriebsplanung</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block w-8 h-4 rounded" style={{ border: '2.5px dotted #f97316', backgroundColor: '#f9731610', backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 6px, #f9731625 6px, #f9731625 8px)' }} /> ✏️ Betriebsplanung</span>
               <span className="flex items-center gap-1.5"><span className="inline-block w-8 h-4 rounded bg-red-400/30" style={{ border: '2px solid #f87171' }} /> Überlast</span>
+              <span className="flex items-center gap-1.5">🏖️ Urlaub (U)</span>
+              <span className="flex items-center gap-1.5">🤒 Krank (K)</span>
+              <span className="flex items-center gap-1.5">🔨 Montage (M)</span>
+              <span className="flex items-center gap-1.5">🎓 Schule (S)</span>
               <span className="flex items-center gap-1.5"><span className="inline-block w-8 h-4 rounded" style={{ border: '1px solid #6b728040', backgroundColor: '#6b728020' }}>📝</span> Notizen</span>
             </div>
           </div>
