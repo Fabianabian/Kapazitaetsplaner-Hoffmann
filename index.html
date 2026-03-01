@@ -582,6 +582,7 @@ const CapacityPlanner = () => {
   const [showDisposition, setShowDisposition] = useState(false); // Disposition (Excel-Style)
   const [showBPv2, setShowBPv2] = useState(false); // Betriebsplanung V2 (hybrid cockpit + dispo)
   const [dispoLayers, setDispoLayers] = useState({ pp: true, sp: true, dispo: true }); // persist across re-renders
+  const [expandedVehicles, setExpandedVehicles] = useState(new Set());
   const dispoScrollPos = React.useRef({ left: 0, top: 0 }); // persist scroll across remounts
   const [dispositions, setDispositions] = useState([]); // [{id, userId, date, projectId, label, color, type}]
   const [dayNotes, setDayNotes] = useState([]); // [{id, userId, date, text, icon, color}]
@@ -640,7 +641,7 @@ const CapacityPlanner = () => {
         const driverProjects = (dispositions || []).filter(dp =>
           dp.userId === d.userId && dp.date === d.date && dp.type === 'assignment'
         ).map(dp => ({ id: dp.projectId, name: dp.label || '?', color: dp.color || '#888' }));
-        m[key].push({ userId: d.userId, userName: userMap[d.userId]?.name || '?', projects: driverProjects });
+        m[key].push({ userId: d.userId, userName: userMap[d.userId]?.name || '?', role: d.role || 'fahrer', projects: driverProjects });
       }
     });
     return m;
@@ -805,6 +806,15 @@ const CapacityPlanner = () => {
   const [colorThresholds, setColorThresholds] = useState({ green: 0, blue: 60, orange: 80, red: 100 }); // Auslastungs-Farbstufen in %
   const [wlFocusWP, setWlFocusWP] = useState(null); // { wpId, wpName, userIds: [], color } - Feinplanung-Filter
   const [wlFocusShowAll, setWlFocusShowAll] = useState(true); // true = alle APs des MA zeigen, false = nur fokussiertes AP
+  // Multi-Select Filter-Dropdowns (Octaved-Flow-Stil) — persistiert in localStorage
+  const [wlFilterUsers, setWlFilterUsers] = useState(() => { try { const raw = JSON.parse(localStorage.getItem('kp5_wlFilterUsers')); return Array.isArray(raw) && raw.length > 0 ? new Set(raw) : null; } catch { return null; } });
+  const [wlFilterProjects, setWlFilterProjects] = useState(() => { try { const raw = JSON.parse(localStorage.getItem('kp5_wlFilterProjects')); return Array.isArray(raw) && raw.length > 0 ? new Set(raw) : null; } catch { return null; } });
+  React.useEffect(() => { try { localStorage.setItem('kp5_wlFilterUsers', JSON.stringify(wlFilterUsers ? [...wlFilterUsers] : null)); } catch {} }, [wlFilterUsers]);
+  React.useEffect(() => { try { localStorage.setItem('kp5_wlFilterProjects', JSON.stringify(wlFilterProjects ? [...wlFilterProjects] : null)); } catch {} }, [wlFilterProjects]);
+  const [wlFilterUserOpen, setWlFilterUserOpen] = useState(false);
+  const [wlFilterProjOpen, setWlFilterProjOpen] = useState(false);
+  const [wlFilterUserSearch, setWlFilterUserSearch] = useState('');
+  const [wlFilterProjSearch, setWlFilterProjSearch] = useState('');
   const [highlightedDays, setHighlightedDays] = useState({}); // { "2026-02-14": "#fbbf24" } - Hervorgehobene Tage
   const [holidays, setHolidays] = useState({}); // Freie Tage: { "2026-02-16": { type: "feiertag", name: "Rosenmontag" } }
   
@@ -5267,6 +5277,22 @@ const CapacityPlanner = () => {
         return assignments.join(', ');
       };
       
+      // Projekt-zu-Teilnehmer-Auflösung für Projekt-Filter-Dropdown
+      const wlProjectParticipants = React.useMemo(() => {
+        if (!wlFilterProjects || wlFilterProjects.size === 0) return null;
+        const uids = new Set(), rids = new Set();
+        workPackages.forEach(wp => {
+          if (!wlFilterProjects.has(wp.projectId)) return;
+          (wp.responsibles || []).forEach(a => uids.add(typeof a === 'object' ? a.userId : a));
+          (wp.editors || []).forEach(a => uids.add(typeof a === 'object' ? a.userId : a));
+          (wp.resourceIds || []).forEach(id => rids.add(id));
+          (wp.divisionIds || []).forEach(dId => {
+            resources.filter(r => r.abteilungId === dId).forEach(r => rids.add(r.id));
+          });
+        });
+        return { userIds: uids, resourceIds: rids };
+      }, [wlFilterProjects, workPackages, resources]);
+
       // Workload-Berechnung: Stunden pro Person pro Tag
       const calculateWorkload = React.useMemo(() => {
         const workload = {}; // { userId: { 'YYYY-MM-DD': { total: X, details: [{wpName, hours}] } } }
@@ -8276,15 +8302,39 @@ const CapacityPlanner = () => {
                   {resources.filter(r => r.type === 'fahrzeug').length > 0 && (
                     <div className="border-t border-slate-700 px-2 pt-2 pb-1">
                       <div className="text-[10px] font-bold text-slate-500 mb-1">🚛 Fahrzeuge</div>
-                      {resources.filter(r => r.type === 'fahrzeug').sort((a,b) => a.name.localeCompare(b.name, 'de')).map(res => (
-                        <div key={res.id} draggable
-                          onDragStart={(e) => { setBpv2DragProject({ id: 'vehicle_' + res.id, name: res.name + (res.kennzeichen ? ' (' + res.kennzeichen + ')' : ''), color: '#0ea5e9', _type: 'shift', _resId: res.id }); e.dataTransfer.setData('text/plain', res.name); }}
-                          onDragEnd={() => setBpv2DragProject(null)}
-                          className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded cursor-grab active:cursor-grabbing mb-0.5 hover:bg-slate-700 text-gray-300">
-                          <span>🚛</span><span className="truncate">{res.name}</span>
-                          {res.kennzeichen && <span className="ml-auto text-[9px] px-1 rounded bg-slate-700 text-sky-300">{res.kennzeichen}</span>}
-                        </div>
-                      ))}
+                      {(() => {
+                        const allVehicles = resources.filter(r => r.type === 'fahrzeug').sort((a,b) => a.name.localeCompare(b.name, 'de'));
+                        const vGroups = {};
+                        allVehicles.forEach(v => {
+                          const gId = v.abteilungId || '_sonstige';
+                          if (!vGroups[gId]) vGroups[gId] = [];
+                          vGroups[gId].push(v);
+                        });
+                        const sorted = Object.entries(vGroups).sort((a,b) => {
+                          if (a[0] === '_sonstige') return 1;
+                          if (b[0] === '_sonstige') return -1;
+                          const nameA = (divisions.find(d => d.id === a[0]) || {}).name || '';
+                          const nameB = (divisions.find(d => d.id === b[0]) || {}).name || '';
+                          return nameA.localeCompare(nameB, 'de');
+                        });
+                        return sorted.map(([gId, vehs]) => {
+                          const divName = gId === '_sonstige' ? 'Sonstige Fahrzeuge' : (divisions.find(d => d.id === gId)?.name || 'Sonstige Fahrzeuge');
+                          return (
+                            <React.Fragment key={'drag_fzg_' + gId}>
+                              <div className="text-[9px] font-bold text-slate-600 mt-1 mb-0.5 px-1">{divName} ({vehs.length})</div>
+                              {vehs.map(res => (
+                                <div key={res.id} draggable
+                                  onDragStart={(e) => { setBpv2DragProject({ id: 'vehicle_' + res.id, name: res.name + (res.kennzeichen ? ' (' + res.kennzeichen + ')' : ''), color: '#0ea5e9', _type: 'shift', _resId: res.id }); e.dataTransfer.setData('text/plain', res.name); }}
+                                  onDragEnd={() => setBpv2DragProject(null)}
+                                  className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded cursor-grab active:cursor-grabbing mb-0.5 hover:bg-slate-700 text-gray-300">
+                                  <span>🚛</span><span className="truncate">{res.name}</span>
+                                  {res.kennzeichen && <span className="ml-auto text-[9px] px-1 rounded bg-slate-700 text-sky-300">{res.kennzeichen}</span>}
+                                </div>
+                              ))}
+                            </React.Fragment>
+                          );
+                        });
+                      })()}
                     </div>
                   )}
                   {resources.filter(r => r.type === 'werkzeug').length > 0 && (
@@ -10305,7 +10355,185 @@ const CapacityPlanner = () => {
                 const sepCls = isCk ? 'w-px h-6 bg-gray-200 mx-2' : 'w-px h-5 bg-gray-200 mx-1.5';
                 return (
               <div className={`flex items-center justify-between bg-white border-b flex-shrink-0 ${isCk ? 'px-4 py-2 gap-2' : 'px-3 py-1.5 gap-1'}`}>
-                <div className={`flex items-center ${isCk ? 'gap-2' : 'gap-1'}`}>
+                <div className={`flex items-center ${isCk ? 'gap-2' : 'gap-1'} flex-wrap`}>
+                  {/* Multi-Select Filter-Dropdowns */}
+                  {(() => {
+                    const userFilterActive = wlFilterUsers && wlFilterUsers.size > 0;
+                    const projFilterActive = wlFilterProjects && wlFilterProjects.size > 0;
+                    const sortedFilterUsers = [...(users || [])].filter(u => u.role !== 'admin').sort((a,b) => a.name.localeCompare(b.name, 'de'));
+                    const sortedFilterRes = [...(resources || [])].sort((a,b) => a.name.localeCompare(b.name, 'de'));
+                    const filterTeamMap = {};
+                    sortedFilterUsers.forEach(u => { const t = teams.find(t => t.id === u.teamId); const tName = t ? t.name : 'Ohne Team'; if (!filterTeamMap[tName]) filterTeamMap[tName] = []; filterTeamMap[tName].push(u); });
+                    const filterResTypeMap = {};
+                    sortedFilterRes.forEach(r => { const tName = r.type === 'maschine' ? 'Maschinen' : r.type === 'fahrzeug' ? 'Fahrzeuge' : 'Werkzeuge'; if (!filterResTypeMap[tName]) filterResTypeMap[tName] = []; filterResTypeMap[tName].push(r); });
+                    const activeProjects = (projects || []).filter(p => p.status !== 'abgeschlossen' && p.status !== 'archiviert').sort((a,b) => a.name.localeCompare(b.name, 'de'));
+                    const getProjectParticipantCount = (pId) => {
+                      let uCount = 0, rCount = 0;
+                      const uSet = new Set(), rSet = new Set();
+                      workPackages.filter(wp => wp.projectId === pId).forEach(wp => {
+                        (wp.responsibles || []).forEach(a => uSet.add(typeof a === 'object' ? a.userId : a));
+                        (wp.editors || []).forEach(a => uSet.add(typeof a === 'object' ? a.userId : a));
+                        (wp.resourceIds || []).forEach(id => rSet.add(id));
+                      });
+                      return { users: uSet.size, resources: rSet.size };
+                    };
+                    const dm = darkMode;
+                    return (
+                      <React.Fragment>
+                        {/* Benutzer-Filter Dropdown */}
+                        <div className="relative">
+                          <button onClick={() => { setWlFilterUserOpen(!wlFilterUserOpen); setWlFilterProjOpen(false); setWlFilterUserSearch(''); }} className={`${btnCls} flex items-center gap-1 ${userFilterActive ? 'text-white' : dm ? 'bg-[#2a2a3c] text-gray-400 hover:bg-[#353550]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`} style={userFilterActive ? { backgroundColor: '#0d9488' } : {}}>
+                            <span>👤</span>
+                            <span>{userFilterActive ? `${wlFilterUsers.size} ausgewählt` : 'Alle'}</span>
+                            <span style={{ display: 'inline-block', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: `5px solid ${userFilterActive ? '#fff' : dm ? '#9ca3af' : '#6b7280'}`, marginLeft: 2 }} />
+                          </button>
+                          {wlFilterUserOpen && (
+                            <React.Fragment>
+                              <div className="fixed inset-0 z-30" onClick={() => setWlFilterUserOpen(false)} />
+                              <div className={`absolute left-0 top-full mt-1 z-40 rounded-lg shadow-xl border ${dm ? 'bg-[#2a2a3e] border-[#3a3a4e]' : 'bg-white border-gray-200'}`} style={{ width: 320, maxHeight: 440 }} onClick={e => e.stopPropagation()}>
+                                <div className="p-2 border-b flex items-center gap-2" style={{ borderColor: dm ? '#3a3a4e' : '#e5e7eb' }}>
+                                  <input autoFocus value={wlFilterUserSearch} onChange={e => setWlFilterUserSearch(e.target.value)} placeholder="Suchen..." className={`flex-1 text-sm px-2 py-1 rounded border outline-none ${dm ? 'bg-[#1e1e30] border-[#3a3a4e] text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 placeholder-gray-400'}`} />
+                                  {userFilterActive && <button onClick={() => setWlFilterUsers(null)} className="text-xs text-teal-500 hover:text-teal-400 whitespace-nowrap font-medium">Zurücksetzen</button>}
+                                </div>
+                                <div className="overflow-y-auto p-2 space-y-2" style={{ maxHeight: 380 }}>
+                                  {Object.entries(filterTeamMap).filter(([tName, tUsers]) => {
+                                    if (!wlFilterUserSearch) return true;
+                                    const s = wlFilterUserSearch.toLowerCase();
+                                    return tName.toLowerCase().includes(s) || tUsers.some(u => u.name.toLowerCase().includes(s));
+                                  }).map(([tName, tUsers]) => {
+                                    const filteredTeamUsers = wlFilterUserSearch ? tUsers.filter(u => u.name.toLowerCase().includes(wlFilterUserSearch.toLowerCase()) || tName.toLowerCase().includes(wlFilterUserSearch.toLowerCase())) : tUsers;
+                                    const allIn = filteredTeamUsers.every(u => wlFilterUsers?.has(u.id));
+                                    const someIn = filteredTeamUsers.some(u => wlFilterUsers?.has(u.id));
+                                    return (
+                                      <div key={tName}>
+                                        <div className="flex items-center gap-2 mb-0.5 cursor-pointer py-0.5" onClick={() => {
+                                          setWlFilterUsers(prev => {
+                                            const next = new Set(prev || []);
+                                            if (allIn) filteredTeamUsers.forEach(u => next.delete(u.id));
+                                            else filteredTeamUsers.forEach(u => next.add(u.id));
+                                            return next.size === 0 ? null : next;
+                                          });
+                                        }}>
+                                          <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center text-[8px] flex-shrink-0 ${allIn ? 'bg-indigo-600 border-indigo-600 text-white' : someIn ? 'bg-indigo-200 border-indigo-400' : dm ? 'border-gray-600' : 'border-gray-300'}`}>{allIn ? '✓' : ''}</div>
+                                          <span className="text-xs font-semibold" style={{ color: dm ? '#8888a8' : '#6b7280' }}>{tName}</span>
+                                          <span className="text-[10px] ml-auto" style={{ color: dm ? '#666' : '#9ca3af' }}>{filteredTeamUsers.length}</span>
+                                        </div>
+                                        <div className="ml-5 space-y-0">
+                                          {filteredTeamUsers.map(u => (
+                                            <div key={u.id} className={`flex items-center gap-2 py-0.5 cursor-pointer rounded px-1 -mx-1 ${dm ? 'hover:bg-[#353550]' : 'hover:bg-gray-50'}`} onClick={() => {
+                                              setWlFilterUsers(prev => {
+                                                const next = new Set(prev || []);
+                                                if (next.has(u.id)) next.delete(u.id); else next.add(u.id);
+                                                return next.size === 0 ? null : next;
+                                              });
+                                            }}>
+                                              <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center text-[8px] flex-shrink-0 ${wlFilterUsers?.has(u.id) ? 'bg-indigo-600 border-indigo-600 text-white' : dm ? 'border-gray-600' : 'border-gray-300'}`}>{wlFilterUsers?.has(u.id) ? '✓' : ''}</div>
+                                              <span className={`text-sm ${dm ? 'text-gray-300' : 'text-gray-700'}`}>{u.name}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  {sortedFilterRes.length > 0 && (() => {
+                                    const s = wlFilterUserSearch?.toLowerCase();
+                                    const hasMatch = !s || Object.entries(filterResTypeMap).some(([tName, items]) => tName.toLowerCase().includes(s) || items.some(r => r.name.toLowerCase().includes(s)));
+                                    if (!hasMatch) return null;
+                                    return (
+                                      <React.Fragment>
+                                        <div className="border-t my-1" style={{ borderColor: dm ? '#3a3a4e' : '#e5e7eb' }} />
+                                        <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: dm ? '#666' : '#9ca3af' }}>Ressourcen</div>
+                                        {Object.entries(filterResTypeMap).filter(([tName, items]) => !s || tName.toLowerCase().includes(s) || items.some(r => r.name.toLowerCase().includes(s))).map(([typeName, typeRes]) => {
+                                          const filteredRes = s ? typeRes.filter(r => r.name.toLowerCase().includes(s) || typeName.toLowerCase().includes(s)) : typeRes;
+                                          const allIn = filteredRes.every(r => wlFilterUsers?.has(r.id));
+                                          const someIn = filteredRes.some(r => wlFilterUsers?.has(r.id));
+                                          return (
+                                            <div key={typeName} className="mb-1">
+                                              <div className="flex items-center gap-2 mb-0.5 cursor-pointer py-0.5" onClick={() => {
+                                                setWlFilterUsers(prev => {
+                                                  const next = new Set(prev || []);
+                                                  if (allIn) filteredRes.forEach(r => next.delete(r.id));
+                                                  else filteredRes.forEach(r => next.add(r.id));
+                                                  return next.size === 0 ? null : next;
+                                                });
+                                              }}>
+                                                <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center text-[8px] flex-shrink-0 ${allIn ? 'bg-teal-600 border-teal-600 text-white' : someIn ? 'bg-teal-200 border-teal-400' : dm ? 'border-gray-600' : 'border-gray-300'}`}>{allIn ? '✓' : ''}</div>
+                                                <span className="text-xs font-semibold" style={{ color: dm ? '#8888a8' : '#6b7280' }}>{typeName}</span>
+                                              </div>
+                                              <div className="ml-5 space-y-0">
+                                                {filteredRes.map(r => (
+                                                  <div key={r.id} className={`flex items-center gap-2 py-0.5 cursor-pointer rounded px-1 -mx-1 ${dm ? 'hover:bg-[#353550]' : 'hover:bg-gray-50'}`} onClick={() => {
+                                                    setWlFilterUsers(prev => {
+                                                      const next = new Set(prev || []);
+                                                      if (next.has(r.id)) next.delete(r.id); else next.add(r.id);
+                                                      return next.size === 0 ? null : next;
+                                                    });
+                                                  }}>
+                                                    <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center text-[8px] flex-shrink-0 ${wlFilterUsers?.has(r.id) ? 'bg-teal-600 border-teal-600 text-white' : dm ? 'border-gray-600' : 'border-gray-300'}`}>{wlFilterUsers?.has(r.id) ? '✓' : ''}</div>
+                                                    <span className={`text-sm ${dm ? 'text-gray-300' : 'text-gray-700'}`}>{r.name}</span>
+                                                    {r.code && <span className="text-[10px] ml-auto px-1 rounded" style={{ color: dm ? '#666' : '#9ca3af', backgroundColor: dm ? '#333' : '#f3f4f6' }}>{r.code}</span>}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </React.Fragment>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            </React.Fragment>
+                          )}
+                        </div>
+                        {/* Projekte-Filter Dropdown */}
+                        <div className="relative">
+                          <button onClick={() => { setWlFilterProjOpen(!wlFilterProjOpen); setWlFilterUserOpen(false); setWlFilterProjSearch(''); }} className={`${btnCls} flex items-center gap-1 ${projFilterActive ? 'text-white' : dm ? 'bg-[#2a2a3c] text-gray-400 hover:bg-[#353550]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`} style={projFilterActive ? { backgroundColor: '#0d9488' } : {}}>
+                            <span>📋</span>
+                            <span>{projFilterActive ? `${wlFilterProjects.size} Projekt${wlFilterProjects.size !== 1 ? 'e' : ''}` : 'Alle'}</span>
+                            <span style={{ display: 'inline-block', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: `5px solid ${projFilterActive ? '#fff' : dm ? '#9ca3af' : '#6b7280'}`, marginLeft: 2 }} />
+                          </button>
+                          {wlFilterProjOpen && (
+                            <React.Fragment>
+                              <div className="fixed inset-0 z-30" onClick={() => setWlFilterProjOpen(false)} />
+                              <div className={`absolute left-0 top-full mt-1 z-40 rounded-lg shadow-xl border ${dm ? 'bg-[#2a2a3e] border-[#3a3a4e]' : 'bg-white border-gray-200'}`} style={{ width: 320, maxHeight: 440 }} onClick={e => e.stopPropagation()}>
+                                <div className="p-2 border-b flex items-center gap-2" style={{ borderColor: dm ? '#3a3a4e' : '#e5e7eb' }}>
+                                  <input autoFocus value={wlFilterProjSearch} onChange={e => setWlFilterProjSearch(e.target.value)} placeholder="Projekt suchen..." className={`flex-1 text-sm px-2 py-1 rounded border outline-none ${dm ? 'bg-[#1e1e30] border-[#3a3a4e] text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 placeholder-gray-400'}`} />
+                                  {projFilterActive && <button onClick={() => setWlFilterProjects(null)} className="text-xs text-teal-500 hover:text-teal-400 whitespace-nowrap font-medium">Zurücksetzen</button>}
+                                </div>
+                                <div className="overflow-y-auto p-2 space-y-0" style={{ maxHeight: 380 }}>
+                                  {activeProjects.filter(p => !wlFilterProjSearch || p.name.toLowerCase().includes(wlFilterProjSearch.toLowerCase())).map(p => {
+                                    const counts = getProjectParticipantCount(p.id);
+                                    const isSelected = wlFilterProjects?.has(p.id);
+                                    return (
+                                      <div key={p.id} className={`flex items-center gap-2 py-1.5 cursor-pointer rounded px-2 -mx-0.5 ${dm ? 'hover:bg-[#353550]' : 'hover:bg-gray-50'}`} onClick={() => {
+                                        setWlFilterProjects(prev => {
+                                          const next = new Set(prev || []);
+                                          if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
+                                          return next.size === 0 ? null : next;
+                                        });
+                                      }}>
+                                        <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center text-[8px] flex-shrink-0 ${isSelected ? 'bg-teal-600 border-teal-600 text-white' : dm ? 'border-gray-600' : 'border-gray-300'}`}>{isSelected ? '✓' : ''}</div>
+                                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color || '#6366f1' }} />
+                                        <div className="flex-1 min-w-0">
+                                          <div className={`text-sm truncate ${dm ? 'text-gray-300' : 'text-gray-700'}`}>{p.name}</div>
+                                          <div className="text-[10px]" style={{ color: dm ? '#666' : '#9ca3af' }}>{counts.users} MA, {counts.resources} Res</div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  {activeProjects.filter(p => !wlFilterProjSearch || p.name.toLowerCase().includes(wlFilterProjSearch.toLowerCase())).length === 0 && (
+                                    <div className="text-sm text-center py-4" style={{ color: dm ? '#666' : '#9ca3af' }}>Keine Projekte gefunden</div>
+                                  )}
+                                </div>
+                              </div>
+                            </React.Fragment>
+                          )}
+                        </div>
+                        <div className={sepCls} style={{ backgroundColor: dm ? '#4a4a5e' : '#d1d5db' }} />
+                      </React.Fragment>
+                    );
+                  })()}
                   {[
                     { key: 'mitarbeiter', label: 'Mitarbeiter' },
                     { key: 'ressourcen', label: 'Ressourcen' },
@@ -10562,8 +10790,25 @@ const CapacityPlanner = () => {
                     const activePresetObj = wlActivePreset ? wlCustomPresets.find(p => p.id === wlActivePreset) : null;
                     const presetUserIds = activePresetObj?.userIds ? new Set(activePresetObj.userIds) : null;
                     const presetResIds = activePresetObj?.resourceIds ? new Set(activePresetObj.resourceIds) : null;
-                    const pUsers = presetUserIds ? (users || []).filter(u => presetUserIds.has(u.id)) : (users || []);
-                    const pResources = presetResIds ? (resources || []).filter(r => presetResIds.has(r.id)) : (resources || []);
+                    let pUsers = presetUserIds ? (users || []).filter(u => presetUserIds.has(u.id)) : (users || []);
+                    let pResources = presetResIds ? (resources || []).filter(r => presetResIds.has(r.id)) : (resources || []);
+                    // Multi-Select Dropdown-Filter + Projekt-Filter anwenden (Vereinigung/OR)
+                    if (wlFilterUsers || wlProjectParticipants) {
+                      const resIdSet = new Set((resources || []).map(r => r.id));
+                      const selUserIds = new Set();
+                      const selResIds = new Set();
+                      if (wlFilterUsers) {
+                        wlFilterUsers.forEach(id => { if (resIdSet.has(id)) selResIds.add(id); else selUserIds.add(id); });
+                      }
+                      if (wlProjectParticipants) {
+                        wlProjectParticipants.userIds.forEach(id => selUserIds.add(id));
+                        wlProjectParticipants.resourceIds.forEach(id => selResIds.add(id));
+                      }
+                      if (selUserIds.size > 0 || selResIds.size > 0) {
+                        pUsers = pUsers.filter(u => selUserIds.has(u.id));
+                        pResources = pResources.filter(r => selResIds.has(r.id));
+                      }
+                    }
                     // Shared helpers for all workload views
                     const TREE_INDENT = 22; // px per hierarchy level
                     const TreeLines = ({ level, isLast, parentLines }) => (
@@ -10661,8 +10906,10 @@ const CapacityPlanner = () => {
                             const hasPP = userWPs.length > 0;
                             const hasSP = planProjects.length > 0;
                             // Sections: PP, SP, BP – BP is always last
-                            const sectionLevel = wpLevel;
-                            const itemLevel = wpLevel + 1;
+                            const itemLevel = wpLevel; // flat: items directly under user (no section headers)
+                            const showPP = hasPP && dispoLayers.pp;
+                            const showSP = hasSP && dispoLayers.sp;
+                            const showBP = dispoLayers.dispo;
                             
                             // Get BP entries for this user (unique projects)
                             const userDispos = (dispositions || []).filter(d => d.userId === u.id && d.type === 'assignment');
@@ -10692,62 +10939,36 @@ const CapacityPlanner = () => {
                             const resTypeOrder = { maschine: 0, fahrzeug: 1, werkzeug: 2 };
                             const shiftResList = Object.values(shiftsByRes).sort((a, b) => (resTypeOrder[a.type] || 9) - (resTypeOrder[b.type] || 9) || (a.label || '').localeCompare(b.label || '', 'de'));
                             const resTypeIcons = { maschine: '🏭', fahrzeug: '🚛', werkzeug: '🔧' };
-                            const isResSecExp = workloadExpandedGroups[u.id + '_res_sec'] !== false;
 
-                            // Section 1: Maschinenzuweisung (collapsible header + per-resource rows)
+                            // Machines (flat, no header)
                             if (hasMach) {
-                              rows.push(
-                                <div key={u.id + '_sec_mach'} className="flex items-center gap-1.5 pr-2 border-b cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}
-                                  onClick={(e) => { e.stopPropagation(); setWorkloadExpandedGroups(prev => ({...prev, [u.id + '_res_sec']: !isResSecExp})); }}>
-                                  <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
-                                  <span className="wl-t-tiny flex-shrink-0" style={{ color: '#999999' }}>{isResSecExp ? '▼' : '▶'}</span>
-                                  <span style={{ fontSize: 9 }}>🔧</span>
-                                  <span className="wl-t-xxs font-bold truncate" style={{ color: '#06b6d4', letterSpacing: '0.03em' }}>Maschinenzuweisung</span>
-                                  <span className="wl-t-tiny ml-auto" style={{ color: '#06b6d499' }}>{shiftResList.length}</span>
-                                </div>
-                              );
-                              if (isResSecExp) {
-                                const machParentLines = [...wpParentLines, true];
-                                shiftResList.forEach((sr, sri) => {
-                                  const isLastRes = sri === shiftResList.length - 1;
-                                  rows.push(
-                                    <div key={u.id + '_res_' + sr.resId} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
-                                      <TreeLines level={itemLevel} isLast={isLastRes} parentLines={machParentLines} />
-                                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                        <span style={{ fontSize: 9 }}>{resTypeIcons[sr.type] || '⚙️'}</span>
-                                        <span className="truncate">{sr.label}</span>
-                                        <span className="wl-t-tiny ml-auto flex-shrink-0" style={{ color: '#06b6d499' }}>{sr.totalDays}d</span>
-                                      </div>
+                              shiftResList.forEach((sr, sri) => {
+                                const isLastRes = sri === shiftResList.length - 1 && !showPP && !showSP && !showBP;
+                                rows.push(
+                                  <div key={u.id + '_res_' + sr.resId} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
+                                    <TreeLines level={itemLevel} isLast={isLastRes} parentLines={wpParentLines} />
+                                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                      <span style={{ fontSize: 9 }}>{resTypeIcons[sr.type] || '⚙️'}</span>
+                                      <span className="truncate">{sr.label}</span>
+                                      <span className="wl-t-tiny ml-auto flex-shrink-0" style={{ color: '#06b6d499' }}>{sr.totalDays}d</span>
                                     </div>
-                                  );
-                                });
-                              }
+                                  </div>
+                                );
+                              });
                             }
 
-                            // Section 2: Projektplanung (collapsible)
-                            const isPPSecExp = workloadExpandedGroups[u.id + '_pp_sec'] !== false;
-                            if (hasPP) {
-                              rows.push(
-                                <div key={u.id + '_sec_pp'} className="flex items-center gap-1.5 pr-2 border-b cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}
-                                  onClick={(e) => { e.stopPropagation(); setWorkloadExpandedGroups(prev => ({...prev, [u.id + '_pp_sec']: !isPPSecExp})); }}>
-                                  <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
-                                  <span className="wl-t-tiny flex-shrink-0" style={{ color: '#999999' }}>{isPPSecExp ? '▼' : '▶'}</span>
-                                  <span style={{ fontSize: 9 }}>📐</span>
-                                  <span className="wl-t-xxs font-bold truncate" style={{ color: '#6366f1', letterSpacing: '0.03em' }}>Aus Projektplanung</span>
-                                  <span className="wl-t-tiny ml-auto" style={{ color: '#6366f199' }}>{userWPs.length}</span>
-                                </div>
-                              );
-                              if (isPPSecExp) {
-                                const ppParentLines = [...wpParentLines, true];
+                            // PP items (flat, no header)
+                            if (showPP) {
                                 userWPs.forEach((wp, wi) => {
                                   const project = projects.find(p => p.id === wp.projectId);
                                   const wpColor = wp.color || project?.color || '#6366f1';
-                                  const isLastWP = wi === userWPs.length - 1;
+                                  const isLastWP = wi === userWPs.length - 1 && !showSP && !showBP;
                                   rows.push(
                                     <div key={u.id + '_pp_' + wp.id} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}
                                       onClick={(e) => { e.stopPropagation(); openSidebar(wp.id); }}>
-                                      <TreeLines level={itemLevel} isLast={isLastWP} parentLines={ppParentLines} />
+                                      <TreeLines level={itemLevel} isLast={isLastWP} parentLines={wpParentLines} />
                                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                        <span style={{ fontSize: 9 }}>📐</span>
                                         <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: wpColor }} />
                                         <span className="truncate"><span style={{ opacity: 0.6 }}>{project?.name} ›</span> {wp.name}</span>
                                         <span className="wl-t-tiny ml-auto flex-shrink-0" style={{ color: '#999999' }}>{getUserHours([...(wp.responsibles || []), ...(wp.editors || [])], u.id)}h</span>
@@ -10755,29 +10976,15 @@ const CapacityPlanner = () => {
                                     </div>
                                   );
                                 });
-                              }
                             }
 
-                            // Section 3: Schnellplanung (collapsible)
-                            const isSPSecExp = workloadExpandedGroups[u.id + '_sp_sec'] !== false;
-                            if (hasSP) {
-                              rows.push(
-                                <div key={u.id + '_sec_sp'} className="flex items-center gap-1.5 pr-2 border-b cursor-pointer" style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}
-                                  onClick={(e) => { e.stopPropagation(); setWorkloadExpandedGroups(prev => ({...prev, [u.id + '_sp_sec']: !isSPSecExp})); }}>
-                                  <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
-                                  <span className="wl-t-tiny flex-shrink-0" style={{ color: '#999999' }}>{isSPSecExp ? '▼' : '▶'}</span>
-                                  <span style={{ fontSize: 9 }}>📋</span>
-                                  <span className="wl-t-xxs font-bold truncate" style={{ color: '#f59e0b', letterSpacing: '0.03em' }}>Aus Schnellplanung</span>
-                                  <span className="wl-t-tiny ml-auto" style={{ color: '#f59e0b99' }}>{planProjects.length}</span>
-                                </div>
-                              );
-                              if (isSPSecExp) {
-                                const spParentLines = [...wpParentLines, true];
+                            // SP items (flat, no header)
+                            if (showSP) {
                                 planProjects.forEach((pp, pi) => {
-                                  const isLastSP = pi === planProjects.length - 1;
+                                  const isLastSP = pi === planProjects.length - 1 && !showBP;
                                   rows.push(
                                     <div key={u.id + '_sp_' + pp.projectId} className="flex items-center gap-0 pr-2 py-0 border-b wl-t-xs relative" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555555' }}>
-                                      <TreeLines level={itemLevel} isLast={isLastSP} parentLines={spParentLines} />
+                                      <TreeLines level={itemLevel} isLast={isLastSP} parentLines={wpParentLines} />
                                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                         <span className="flex-shrink-0" style={{ fontSize: 9 }}>📋</span>
                                         <span className="truncate" style={{ fontStyle: 'italic' }}>{pp.name}</span>
@@ -10786,35 +10993,10 @@ const CapacityPlanner = () => {
                                     </div>
                                   );
                                 });
-                              }
                             }
 
-                            // Section 4: Betriebsplanung (collapsible, always show, droppable) – LAST section
-                            const isBPSecExp = workloadExpandedGroups[u.id + '_bp_sec'] !== false;
-                            rows.push(
-                              <div key={u.id + '_sec_bp'} className="flex items-center gap-1.5 pr-2 border-b cursor-pointer"
-                                style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}
-                                onClick={(e) => { e.stopPropagation(); setWorkloadExpandedGroups(prev => ({...prev, [u.id + '_bp_sec']: !isBPSecExp})); }}
-                                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; e.currentTarget.style.backgroundColor = '#10b98130'; }}
-                                onDragLeave={(e) => { e.currentTarget.style.backgroundColor = dm ? '#2a2a3e' : '#fafafa'; }}
-                                onDrop={(e) => {
-                                  e.preventDefault(); e.currentTarget.style.backgroundColor = dm ? '#2a2a3e' : '#fafafa';
-                                  if (!bpv2DragProject) return;
-                                  const proj = bpv2DragProject;
-                                  const today = formatDate(new Date());
-                                  const entry = { userId: u.id, date: today, type: proj._type || 'assignment', projectId: proj.id, label: proj.name, color: proj.color || '#888', _resId: proj._resId || null, shift: proj._shift || null };
-                                  const newDisp = [...dispositions, entry];
-                                  saveDispositions(newDisp);
-                                }}>
-                                <TreeLines level={sectionLevel} isLast={true} parentLines={wpParentLines} />
-                                <span className="wl-t-tiny flex-shrink-0" style={{ color: '#999999' }}>{isBPSecExp ? '▼' : '▶'}</span>
-                                <span style={{ fontSize: 9 }}>✏️</span>
-                                <span className="wl-t-xxs font-bold truncate" style={{ color: '#10b981', letterSpacing: '0.03em' }}>Betriebsplanung</span>
-                                {bpList.length > 0 && <span className="wl-t-tiny ml-auto" style={{ color: '#10b98199' }}>{bpList.length}</span>}
-                              </div>
-                            );
-                            if (isBPSecExp) {
-                              const bpParentLines = [...wpParentLines, false];
+                            // BP items (flat, no header, droppable)
+                            if (showBP) {
                               bpList.forEach((bp, bi) => {
                                 rows.push(
                                   <div key={u.id + '_bp_' + (bp.projectId || bi)}
@@ -10829,8 +11011,9 @@ const CapacityPlanner = () => {
                                       const entry = { userId: u.id, date: today, type: proj._type || 'assignment', projectId: proj.id, label: proj.name, color: proj.color || '#888' };
                                       saveDispositions([...dispositions, entry]);
                                     }}>
-                                    <TreeLines level={itemLevel} isLast={false} parentLines={bpParentLines} />
+                                    <TreeLines level={itemLevel} isLast={false} parentLines={wpParentLines} />
                                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                      <span style={{ fontSize: 9 }}>✏️</span>
                                       <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: bp.color, border: '1px dotted ' + (dm ? '#666' : '#bbb') }} />
                                       <span className="truncate">{bp.label}</span>
                                     </div>
@@ -10852,11 +11035,11 @@ const CapacityPlanner = () => {
                                     const entry = { userId: u.id, date: today, type: proj._type || 'assignment', projectId: proj.id, label: proj.name, color: proj.color || '#888', _resId: proj._resId || null, shift: proj._shift || null };
                                     saveDispositions([...dispositions, entry]);
                                   }}>
-                                  <TreeLines level={itemLevel} isLast={true} parentLines={bpParentLines} />
+                                  <TreeLines level={itemLevel} isLast={true} parentLines={wpParentLines} />
                                   <span className="wl-t-tiny" style={{ color: '#10b981' }}>+ Hier droppen…</span>
                                 </div>
                               );
-                            }
+                            } // end dispoLayers.dispo (employee sidebar)
                           } else {
                           // === Normal mode: flat list ===
                           const allItems = [...userWPs.map(wp => ({...wp, _type: 'wp'})), ...planProjects.map(pp => ({...pp, _type: 'plan'}))];
@@ -11100,9 +11283,9 @@ const CapacityPlanner = () => {
                                   const itemLevel = 4;
                                   const hasMachinist = r.type === 'maschine';
                                   const hasPP = resWPs.length > 0;
-                                  
+
                                   // Machinist row (machines only)
-                                  if (hasMachinist) {
+                                  if (hasMachinist && dispoLayers.dispo) {
                                     rows.push(
                                       <div key={'cmb_' + r.id + '_machinist'} className="flex items-center gap-1.5 pr-2 border-b"
                                         style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}>
@@ -11113,7 +11296,7 @@ const CapacityPlanner = () => {
                                     );
                                   }
                                   // Section: Projektplanung
-                                  if (hasPP) {
+                                  if (hasPP && dispoLayers.pp) {
                                     rows.push(
                                       <div key={'cmb_' + r.id + '_sec_pp'} className="flex items-center gap-1.5 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}>
                                         <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
@@ -11166,7 +11349,7 @@ const CapacityPlanner = () => {
                                     });
                                     return Object.values(spMap);
                                   })();
-                                  if (resSpProjects.length > 0) {
+                                  if (resSpProjects.length > 0 && dispoLayers.sp) {
                                     rows.push(
                                       <div key={'cmb_' + r.id + '_sec_sp'} className="flex items-center gap-1.5 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: dm ? '#2a2a3e' : '#fafafa', borderColor: grpBorder }}>
                                         <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
@@ -11190,6 +11373,7 @@ const CapacityPlanner = () => {
                                     });
                                   }
                                   // Section: Betriebsplanung – LAST section
+                                  if (dispoLayers.dispo) {
                                   const resDispos = (dispositions || []).filter(d => d.userId === ('res_' + r.id) && d.type === 'assignment');
                                   const resBpProjects = {};
                                   resDispos.forEach(d => {
@@ -11248,6 +11432,7 @@ const CapacityPlanner = () => {
                                       <span className="wl-t-tiny" style={{ color: '#10b981' }}>+ Hier droppen…</span>
                                     </div>
                                   );
+                                  } // end dispoLayers.dispo
                                 } else {
                                 // === Normal mode ===
                                 const MAX_VIS = 3;
@@ -11362,7 +11547,7 @@ const CapacityPlanner = () => {
                               const hasPP = resWPs.length > 0;
                               
                               // Machinist assignment row (only for machines)
-                              if (hasMachinist) {
+                              if (hasMachinist && dispoLayers.dispo) {
                                 rows.push(
                                   <div key={r.id + '_machinist'} className="flex items-center gap-1.5 pr-2 border-b"
                                     style={{ height: WLR_WP, backgroundColor: '#06b6d415', borderColor: grpBorder }}
@@ -11375,10 +11560,20 @@ const CapacityPlanner = () => {
                                       if (proj._type === 'shift' || proj._resId) {
                                         const today = formatDate(new Date());
                                         const rShift = SHIFT_TYPES.find(s => s.key === proj._shift) || SHIFT_TYPES.find(s => s.num === (r.schichtmodell || 1)) || SHIFT_TYPES[0];
-                                        // Replace: remove existing machinist for this machine+date
-                                        const cleaned = dispositions.filter(d => !(d._resId === r.id && d.date === today && d.type === 'shift'));
-                                        const entry = { userId: proj._resId ? 'res_' + proj._resId : proj.id, date: today, type: 'shift', shift: rShift.key, label: proj.name || 'Schicht', color: rShift.color, _resId: r.id };
-                                        saveDispositions([...cleaned, entry]);
+                                        if (r.type === 'fahrzeug') {
+                                          // Vehicle: Add crew member (max 6)
+                                          const existing = dispositions.filter(d => d._resId === r.id && d.date === today && d.type === 'shift');
+                                          const newUserId = proj._resId ? 'res_' + proj._resId : proj.id;
+                                          if (existing.length >= 6 || existing.some(d => d.userId === newUserId)) return;
+                                          const role = existing.length === 0 ? 'fahrer' : 'beifahrer';
+                                          const entry = { userId: newUserId, date: today, type: 'shift', shift: rShift.key, label: proj.name || 'Schicht', color: rShift.color, _resId: r.id, role };
+                                          saveDispositions([...dispositions, entry]);
+                                        } else {
+                                          // Machine: Replace existing machinist
+                                          const cleaned = dispositions.filter(d => !(d._resId === r.id && d.date === today && d.type === 'shift'));
+                                          const entry = { userId: proj._resId ? 'res_' + proj._resId : proj.id, date: today, type: 'shift', shift: rShift.key, label: proj.name || 'Schicht', color: rShift.color, _resId: r.id };
+                                          saveDispositions([...cleaned, entry]);
+                                        }
                                       }
                                     }}>
                                     <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
@@ -11390,7 +11585,7 @@ const CapacityPlanner = () => {
                               }
                               
                               // Section: Projektplanung
-                              if (hasPP) {
+                              if (hasPP && dispoLayers.pp) {
                                 rows.push(
                                   <div key={r.id + '_sec_pp'} className="flex items-center gap-1.5 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: '#6366f115', borderColor: grpBorder }}>
                                     <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
@@ -11444,7 +11639,7 @@ const CapacityPlanner = () => {
                                 });
                                 return Object.values(spMap);
                               })();
-                              if (resSpProjects2.length > 0) {
+                              if (resSpProjects2.length > 0 && dispoLayers.sp) {
                                 rows.push(
                                   <div key={r.id + '_sec_sp'} className="flex items-center gap-1.5 pr-2 border-b" style={{ height: WLR_WP, backgroundColor: '#f59e0b15', borderColor: grpBorder }}>
                                     <TreeLines level={sectionLevel} isLast={false} parentLines={wpParentLines} />
@@ -11469,6 +11664,7 @@ const CapacityPlanner = () => {
                               }
                               
                               // Section: Betriebsplanung – LAST section
+                              if (dispoLayers.dispo) {
                               const resBpDispos2 = (dispositions || []).filter(d => d.userId === ('res_' + r.id) && d.type === 'assignment');
                               const resBpProj2 = {};
                               resBpDispos2.forEach(d => {
@@ -11528,6 +11724,7 @@ const CapacityPlanner = () => {
                                   <span className="wl-t-tiny" style={{ color: '#10b981' }}>+ Hier droppen…</span>
                                 </div>
                               );
+                              } // end dispoLayers.dispo
                             } else {
                             // === Normal mode ===
                             const MAX_VIS2 = 3;
@@ -11578,20 +11775,65 @@ const CapacityPlanner = () => {
                         }
                       });
                     } else if (workloadFilter === 'fahrzeuge') {
-                      const vehicles = pResources.filter(r => r.type === 'fahrzeug').sort((a,b) => a.name.localeCompare(b.name, 'de'));
+                      const allVehicles = pResources.filter(r => r.type === 'fahrzeug').sort((a,b) => a.name.localeCompare(b.name, 'de'));
+                      // Main header
                       rows.push(
                         <div key="_fzg_header" className="flex items-center gap-1.5 px-2 py-1 border-b font-bold" style={{ height: WLR_GRP, backgroundColor: dm ? '#2a2a3e' : '#dcdcdc', borderColor: grpBorder, color: dm ? '#c0c0d8' : '#444444' }}>
-                          <span>{'\u{1F69B}'} Fahrzeuge ({vehicles.length} Fzg)</span>
+                          <span>{'\u{1F69B}'} Fahrzeuge ({allVehicles.length} Fzg)</span>
                         </div>
                       );
-                      vehicles.forEach(r => {
+                      // Group by abteilungId
+                      const fzgGroups = {};
+                      allVehicles.forEach(v => {
+                        const gId = v.abteilungId || '_sonstige';
+                        if (!fzgGroups[gId]) fzgGroups[gId] = [];
+                        fzgGroups[gId].push(v);
+                      });
+                      const fzgSorted = Object.entries(fzgGroups).sort((a,b) => {
+                        if (a[0] === '_sonstige') return 1;
+                        if (b[0] === '_sonstige') return -1;
+                        const nameA = (divisions.find(d => d.id === a[0]) || {}).name || '';
+                        const nameB = (divisions.find(d => d.id === b[0]) || {}).name || '';
+                        return nameA.localeCompare(nameB, 'de');
+                      });
+                      fzgSorted.forEach(([gId, vehs]) => {
+                        const divName = gId === '_sonstige' ? 'Sonstige Fahrzeuge' : (divisions.find(d => d.id === gId)?.name || 'Sonstige Fahrzeuge');
+                        const catKey = 'wl_fzg_' + gId;
+                        const catExp = isGroupExp(catKey);
                         rows.push(
-                          <div key={'fzg_' + r.id} className="flex items-center gap-1.5 px-2 pr-2 py-1 border-b wl-t-sm font-medium" style={{ height: WLR_SUM, backgroundColor: dm ? '#2a2a3e' : '#f4f4f4', borderColor: grpBorder, color: dm ? '#d0d0e0' : '#333333' }}>
-                            <span style={{ fontSize: 11 }}>{'\u{1F69B}'}</span>
-                            <span className="truncate flex-1">{r.name}</span>
-                            {r.kennzeichen && <span className="wl-t-xxs text-[9px] px-1 py-0.5 rounded font-mono flex-shrink-0" style={{ backgroundColor: dm ? '#3a3a4e' : '#e2e8f0', color: dm ? '#9ca3af' : '#64748b' }}>{r.kennzeichen}</span>}
+                          <div key={catKey} className="flex items-center gap-1 px-2 py-1 border-b cursor-pointer font-semibold" style={{ height: WLR_GRP, backgroundColor: dm ? '#2a2a3e' : '#e2e2e2', borderColor: grpBorder, color: dm ? '#c0c0d8' : '#444444' }} onClick={() => toggleGroup(catKey)}>
+                            <span style={{ color: '#999999' }}>{catExp ? '▼' : '▶'}</span>
+                            <span className="truncate">{'\u{1F69B}'} {divName}</span>
+                            <span className="ml-auto font-normal" style={{ color: '#999999' }}>{vehs.length} Fzg</span>
                           </div>
                         );
+                        if (catExp) {
+                          vehs.forEach(r => {
+                            const isVehExp = expandedVehicles.has(r.id);
+                            const vehDrivers = (() => { const cm = {}; dayMeta.forEach(dm => { const d = vehicleDriverProjectMap[r.id + '_' + dm.ds]; if (d) d.forEach(dd => { if (!cm[dd.userId]) cm[dd.userId] = { userId: dd.userId, userName: dd.userName, role: dd.role || 'fahrer' }; }); }); return Object.values(cm).sort((a, b) => (a.role === 'fahrer' ? 0 : 1) - (b.role === 'fahrer' ? 0 : 1) || a.userName.localeCompare(b.userName, 'de')); })();
+                            rows.push(
+                              <div key={'fzg_' + r.id} className="flex items-center gap-1.5 px-2 pr-2 py-1 border-b wl-t-sm font-medium cursor-pointer" style={{ height: WLR_SUM, backgroundColor: dm ? '#2a2a3e' : '#f4f4f4', borderColor: grpBorder, color: dm ? '#d0d0e0' : '#333333' }}
+                                onClick={() => setExpandedVehicles(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}>
+                                <span style={{ color: '#999', fontSize: 9 }}>{isVehExp ? '\u25BC' : '\u25B6'}</span>
+                                <span style={{ fontSize: 11 }}>{'\u{1F69B}'}</span>
+                                <span className="truncate flex-1">{r.name}</span>
+                                {vehDrivers.length > 0 && <span className="text-[9px] px-1 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: dm ? '#164e63' : '#e0f2fe', color: '#06b6d4' }}>{vehDrivers.length}</span>}
+                                {r.kennzeichen && <span className="wl-t-xxs text-[9px] px-1 py-0.5 rounded font-mono flex-shrink-0" style={{ backgroundColor: dm ? '#3a3a4e' : '#e2e8f0', color: dm ? '#9ca3af' : '#64748b' }}>{r.kennzeichen}</span>}
+                              </div>
+                            );
+                            if (isVehExp) {
+                              vehDrivers.forEach((d, di) => {
+                                rows.push(
+                                  <div key={'fzg_' + r.id + '_crew_' + d.userId} className="flex items-center gap-1.5 pl-6 pr-2 border-b wl-t-xs" style={{ height: WLR_WP, backgroundColor: dm ? '#1e1e30' : '#fafafa', borderColor: grpBorder, color: dm ? '#b0b0c8' : '#555' }}>
+                                    <span style={{ fontSize: 9 }}>{d.role === 'fahrer' ? '\u{1F697}' : '\u{1F464}'}</span>
+                                    <span className="truncate flex-1">{d.userName}</span>
+                                    <span className="text-[8px] flex-shrink-0" style={{ color: d.role === 'fahrer' ? '#06b6d4' : '#9ca3af' }}>{d.role === 'fahrer' ? 'Fahrer' : 'Beifahrer'}</span>
+                                  </div>
+                                );
+                              });
+                            }
+                          });
+                        }
                       });
                     }
 
@@ -11721,8 +11963,25 @@ const CapacityPlanner = () => {
                       const _activePresetObj = wlActivePreset ? wlCustomPresets.find(p => p.id === wlActivePreset) : null;
                       const _presetUserIds = _activePresetObj?.userIds ? new Set(_activePresetObj.userIds) : null;
                       const _presetResIds = _activePresetObj?.resourceIds ? new Set(_activePresetObj.resourceIds) : null;
-                      const pUsers = _presetUserIds ? (users || []).filter(u => _presetUserIds.has(u.id)) : (users || []);
-                      const pResources = _presetResIds ? (resources || []).filter(r => _presetResIds.has(r.id)) : (resources || []);
+                      let pUsers = _presetUserIds ? (users || []).filter(u => _presetUserIds.has(u.id)) : (users || []);
+                      let pResources = _presetResIds ? (resources || []).filter(r => _presetResIds.has(r.id)) : (resources || []);
+                      // Multi-Select Dropdown-Filter + Projekt-Filter anwenden (Vereinigung/OR)
+                      if (wlFilterUsers || wlProjectParticipants) {
+                        const resIdSet = new Set((resources || []).map(r => r.id));
+                        const selUserIds = new Set();
+                        const selResIds = new Set();
+                        if (wlFilterUsers) {
+                          wlFilterUsers.forEach(id => { if (resIdSet.has(id)) selResIds.add(id); else selUserIds.add(id); });
+                        }
+                        if (wlProjectParticipants) {
+                          wlProjectParticipants.userIds.forEach(id => selUserIds.add(id));
+                          wlProjectParticipants.resourceIds.forEach(id => selResIds.add(id));
+                        }
+                        if (selUserIds.size > 0 || selResIds.size > 0) {
+                          pUsers = pUsers.filter(u => selUserIds.has(u.id));
+                          pResources = pResources.filter(r => selResIds.has(r.id));
+                        }
+                      }
                       
                       const renderUserRow = (u, key) => {
                         const REF_MAX = 12; // 12h = cell top
@@ -12420,11 +12679,19 @@ const CapacityPlanner = () => {
                                   if (!bpv2DragProject) return;
                                   const proj = bpv2DragProject;
                                   if (proj._type === 'shift' && !proj._resId) {
-                                    // Person drop → assign as machinist for this resource on this date
+                                    // Person drop → assign as machinist/crew
                                     const rShift = SHIFT_TYPES.find(s => s.num === (r.schichtmodell || 1)) || SHIFT_TYPES[0];
-                                    const cleaned = dispositions.filter(d => !(d._resId === r.id && d.date === ds && d.type === 'shift'));
-                                    const entry = { userId: proj.id, date: ds, type: 'shift', shift: rShift.key, label: r.name, color: rShift.color, _resId: r.id };
-                                    saveDispositions([...cleaned, entry]);
+                                    if (r.type === 'fahrzeug') {
+                                      const existing = dispositions.filter(d => d._resId === r.id && d.date === ds && d.type === 'shift');
+                                      if (existing.length >= 6 || existing.some(d => d.userId === proj.id)) return;
+                                      const role = existing.length === 0 ? 'fahrer' : 'beifahrer';
+                                      const entry = { userId: proj.id, date: ds, type: 'shift', shift: rShift.key, label: r.name, color: rShift.color, _resId: r.id, role };
+                                      saveDispositions([...dispositions, entry]);
+                                    } else {
+                                      const cleaned = dispositions.filter(d => !(d._resId === r.id && d.date === ds && d.type === 'shift'));
+                                      const entry = { userId: proj.id, date: ds, type: 'shift', shift: rShift.key, label: r.name, color: rShift.color, _resId: r.id };
+                                      saveDispositions([...cleaned, entry]);
+                                    }
                                   } else {
                                     // Project or resource drop → assign to this resource
                                     const memberId = 'res_' + r.id;
@@ -12596,7 +12863,8 @@ const CapacityPlanner = () => {
                             const tooltipLines = [`${'\u{1F69B}'} ${r.name}${r.kennzeichen ? ' (' + r.kennzeichen + ')' : ''} \u2013 ${ds}`];
                             if (hasDrivers) {
                               drivers.forEach(d => {
-                                tooltipLines.push(`Fahrer: ${d.userName}`);
+                                const roleLabel = (d.role || 'fahrer') === 'fahrer' ? 'Fahrer' : 'Beifahrer';
+                                tooltipLines.push(`${roleLabel}: ${d.userName}`);
                                 if (d.projects.length > 0) tooltipLines.push(`  \u2192 ${d.projects.map(p => p.name).join(', ')}`);
                               });
                             } else if (!isWE && !isHol) {
@@ -12620,12 +12888,14 @@ const CapacityPlanner = () => {
                                   if (!bpv2DragProject || isWE) return;
                                   const proj = bpv2DragProject;
                                   if (proj._type === 'shift' && !proj._resId) {
-                                    // Drop person → assign as driver of this vehicle
+                                    // Drop person → add as crew member (max 6)
+                                    const existing = dispositions.filter(d => d._resId === r.id && d.date === ds && d.type === 'shift');
+                                    if (existing.length >= 6) return;
+                                    if (existing.some(d => d.userId === proj.id)) return; // already assigned
                                     const vShift = SHIFT_TYPES.find(s => s.num === (r.schichtmodell || 1)) || SHIFT_TYPES[0];
-                                    // Replace existing driver for this vehicle+date
-                                    const cleaned = dispositions.filter(d => !(d._resId === r.id && d.date === ds && d.type === 'shift'));
-                                    const entry = { userId: proj.id, date: ds, type: 'shift', shift: vShift.key, label: r.name, color: vShift.color, _resId: r.id };
-                                    saveDispositions([...cleaned, entry]);
+                                    const role = existing.length === 0 ? 'fahrer' : 'beifahrer';
+                                    const entry = { userId: proj.id, date: ds, type: 'shift', shift: vShift.key, label: r.name, color: vShift.color, _resId: r.id, role };
+                                    saveDispositions([...dispositions, entry]);
                                   } else if (proj._type !== 'shift') {
                                     // Drop project → assign project to all current drivers of this vehicle on this date
                                     const currentDrivers = vehicleDriverProjectMap[r.id + '_' + ds] || [];
@@ -12644,9 +12914,15 @@ const CapacityPlanner = () => {
                               >
                                 {!isWE && !isHol && hasDrivers && (
                                   <React.Fragment>
-                                    {/* Driver names (cyan, bold) */}
+                                    {/* Compact crew display */}
                                     <div className="truncate w-full leading-tight pointer-events-none" style={{ fontSize: Math.max(7, bpv2FontSize - 3), fontWeight: 700, color: '#06b6d4' }}>
-                                      {drivers.map(d => { const parts = d.userName.split(','); return parts[0].trim(); }).join(' + ')}
+                                      {(() => {
+                                        const fahrer = drivers.find(d => d.role === 'fahrer') || drivers[0];
+                                        const fahrerName = fahrer.userName.split(',')[0].trim();
+                                        if (drivers.length === 1) return fahrerName + ' (F)';
+                                        if (drivers.length === 2) { const bf = drivers.find(d => d !== fahrer); return fahrerName + ' (F) + ' + (bf?.userName.split(',')[0].trim() || '?'); }
+                                        return fahrerName + ' (F) +' + (drivers.length - 1);
+                                      })()}
                                     </div>
                                     {/* Project names below */}
                                     {drivers.some(d => d.projects.length > 0) && (
@@ -12670,6 +12946,40 @@ const CapacityPlanner = () => {
                           })}
                         </div>
                         );
+                      };
+
+                      const renderVehicleCrewRows = (r) => {
+                        if (!expandedVehicles.has(r.id)) return [];
+                        // Collect all unique crew members across the visible date range
+                        const crewMap = {};
+                        dayMeta.forEach(dm => {
+                          const dd = vehicleDriverProjectMap[r.id + '_' + dm.ds];
+                          if (!dd) return;
+                          dd.forEach(d => {
+                            if (!crewMap[d.userId]) crewMap[d.userId] = { userId: d.userId, userName: d.userName, role: d.role || 'fahrer', dates: new Set() };
+                            crewMap[d.userId].dates.add(dm.ds);
+                          });
+                        });
+                        const crew = Object.values(crewMap).sort((a, b) => (a.role === 'fahrer' ? 0 : 1) - (b.role === 'fahrer' ? 0 : 1) || a.userName.localeCompare(b.userName, 'de'));
+                        return crew.map(member => (
+                          <div key={'fzg_' + r.id + '_crew_' + member.userId} className="flex border-b" style={{ height: WLR_WP, backgroundColor: dBg('#fafafa', '#1e1e30'), borderColor: grpBorder }}>
+                            {dayMeta.map((dm, i) => {
+                              const isAssigned = member.dates.has(dm.ds);
+                              let bg = dm.isWE ? dBg('#e5e7eb', '#1a1a2a') : dm.isHol ? dBg('#fee2e2', '#4a2020') : dBg('#fafafa', '#1e1e30');
+                              return (
+                                <div key={i} className="wl-bar-cell flex-shrink-0 border-r relative overflow-hidden" style={{ width: DAY_WIDTH, height: WLR_WP, borderColor: grpBorder, backgroundColor: bg }}>
+                                  {isAssigned && !dm.isWE && !dm.isHol && (
+                                    <div className="absolute" style={{ top: 2, bottom: 2, left: 1, right: 1, borderRadius: 3, backgroundColor: member.role === 'fahrer' ? '#06b6d4' : '#0ea5e9', opacity: 0.7 }}>
+                                      <span className="absolute inset-0 flex items-center px-1 truncate" style={{ fontSize: Math.max(7, bpv2FontSize - 4), color: '#fff', fontWeight: 600 }}>
+                                        {DAY_WIDTH > 40 ? member.userName.split(',')[0].trim() : ''}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ));
                       };
 
                       const renderResWPBarRow = (r, wp) => {
@@ -12794,7 +13104,7 @@ const CapacityPlanner = () => {
                           
                           if (isBPv2Mode) {
                             // === BPv2 mode: Machinist + PP + BP sections ===
-                            const sectionRow = (key, color, resId, userId) => (
+                            const sectionRow = (key, color, resId, userId, onCellContextMenu) => (
                               <div key={key} className="flex" style={{ height: WLR_WP }}>
                                 {dayMeta.map((dm, i) => {
                                   let bg = darkMode ? '#2a2a3e' : '#fafafa';
@@ -12802,7 +13112,8 @@ const CapacityPlanner = () => {
                                   else if (dm.isHol) bg = dBg('#fee2e2', '#4a2020');
                                   const isDown = resId && !dm.isWE && isResourceDown(resId, dm.ds);
                                   const isVac = userId && !dm.isWE && isVacation(userId, dm.ds);
-                                  return <div key={i} className="wl-bar-cell flex-shrink-0 border-b border-r relative" style={{ width: DAY_WIDTH, height: WLR_WP, borderColor: grpBorder, backgroundColor: bg }}>
+                                  return <div key={i} className="wl-bar-cell flex-shrink-0 border-b border-r relative" style={{ width: DAY_WIDTH, height: WLR_WP, borderColor: grpBorder, backgroundColor: bg }}
+                                    onContextMenu={onCellContextMenu ? (e) => onCellContextMenu(e, dm) : undefined}>
                                     {isDown && <div className="absolute inset-0 pointer-events-none z-[8]" style={{ backgroundColor: getDownOverlayColor(resId, dm.ds) }} />}
                                     {isVac && <div className="absolute inset-0 pointer-events-none z-[8]" style={{ backgroundColor: getVacOverlayColor(userId, dm.ds) }} />}
                                   </div>;
@@ -12955,7 +13266,7 @@ const CapacityPlanner = () => {
                             }
                             
                             // Section: Projektplanung
-                            if (resWPs.length > 0) {
+                            if (resWPs.length > 0 && dispoLayers.pp) {
                               gridRows.push(sectionRow('res_' + r.id + '_gsec_pp', '#6366f1', r.id));
                               resWPs.forEach(wp => gridRows.push(renderResWPBarRow(r, wp)));
                             }
@@ -13000,12 +13311,13 @@ const CapacityPlanner = () => {
                               });
                               return Object.values(spMap);
                             })();
-                            if (gridResSpProjects.length > 0) {
+                            if (gridResSpProjects.length > 0 && dispoLayers.sp) {
                               gridRows.push(sectionRow('res_' + r.id + '_gsec_sp', '#f59e0b', r.id));
                               gridResSpProjects.forEach(pp => gridRows.push(renderPlanningBarRow({ id: 'res_' + r.id }, pp)));
                             }
                             
                             // Section: Betriebsplanung
+                            if (dispoLayers.dispo) {
                             const resDispos = (dispositions || []).filter(d => d.userId === ('res_' + r.id) && d.type === 'assignment');
                             const resBpProjects = {};
                             resDispos.forEach(d => {
@@ -13039,6 +13351,7 @@ const CapacityPlanner = () => {
                                 })}
                               </div>
                             );
+                            } // end dispoLayers.dispo
                           } else {
                           // === Normal mode ===
                           const MAX_VISIBLE = 3;
@@ -13234,14 +13547,9 @@ const CapacityPlanner = () => {
                               const gResTypeOrder = { maschine: 0, fahrzeug: 1, werkzeug: 2 };
                               const gShiftResList = Object.values(gShiftsByRes).sort((a, b) => (gResTypeOrder[a.type] || 9) - (gResTypeOrder[b.type] || 9) || (a.label || '').localeCompare(b.label || '', 'de'));
                               const gResTypeColors = { maschine: '#06b6d4', fahrzeug: '#0ea5e9', werkzeug: '#8b5cf6' };
-                              const gIsResSecExp = workloadExpandedGroups[u.id + '_res_sec'] !== false;
 
-                              // Section header row
-                              gridRows.push(sectionRow(u.id + '_gsec_mach', '#06b6d4', null, u.id));
-
-                              // Per-resource Gantt bar rows (only when expanded) — interactive like machine-side
-                              if (gIsResSecExp) {
-                                gShiftResList.forEach((sr) => {
+                              // Per-resource Gantt bar rows — interactive like machine-side
+                              gShiftResList.forEach((sr) => {
                                   const resColor = gResTypeColors[sr.type] || '#06b6d4';
                                   const srRes = resources.find(r => r.id === sr.resId);
                                   const srShift = SHIFT_TYPES.find(s => s.num === (srRes?.schichtmodell || 1)) || SHIFT_TYPES[0];
@@ -13375,26 +13683,17 @@ const CapacityPlanner = () => {
                                     </div>
                                   );
                                 });
-                              }
                             }
-                            // Section: Projektplanung (collapsible, synced with sidebar)
-                            const gIsPPSecExp = workloadExpandedGroups[u.id + '_pp_sec'] !== false;
-                            if (wpList.length > 0) {
-                              gridRows.push(sectionRow(u.id + '_gsec_pp', '#6366f1', null, u.id));
-                              if (gIsPPSecExp) {
-                                wpList.forEach(wp => gridRows.push(renderWPBarRow(u, wp)));
-                              }
+                            // Section: Projektplanung (always visible, synced with sidebar)
+                            if (wpList.length > 0 && dispoLayers.pp) {
+                              wpList.forEach(wp => gridRows.push(renderWPBarRow(u, wp)));
                             }
-                            // Section: Schnellplanung (collapsible, synced with sidebar)
-                            const gIsSPSecExp = workloadExpandedGroups[u.id + '_sp_sec'] !== false;
-                            if (planProjects.length > 0) {
-                              gridRows.push(sectionRow(u.id + '_gsec_sp', '#f59e0b', null, u.id));
-                              if (gIsSPSecExp) {
-                                planProjects.forEach(pp => gridRows.push(renderPlanningBarRow(u, pp)));
-                              }
+                            // Section: Schnellplanung (always visible, synced with sidebar)
+                            if (planProjects.length > 0 && dispoLayers.sp) {
+                              planProjects.forEach(pp => gridRows.push(renderPlanningBarRow(u, pp)));
                             }
-                            // Section: Betriebsplanung (collapsible, synced with sidebar)
-                            const gIsBPSecExp = workloadExpandedGroups[u.id + '_bp_sec'] !== false;
+                            // Section: Betriebsplanung (always visible, synced with sidebar)
+                            if (dispoLayers.dispo) {
                             const userDispos = (dispositions || []).filter(d => d.userId === u.id && d.type === 'assignment');
                             const bpProjects = {};
                             userDispos.forEach(d => {
@@ -13403,17 +13702,20 @@ const CapacityPlanner = () => {
                               bpProjects[key].dates.add(d.date);
                             });
                             const bpList = Object.values(bpProjects).sort((a, b) => (a.label || '').localeCompare(b.label || ''));
-                            gridRows.push(sectionRow(u.id + '_gsec_bp', '#10b981', null, u.id));
-                            if (gIsBPSecExp) {
-                              bpList.forEach((bp, bi) => {
-                                gridRows.push(renderBPBarRow(u, bp, bi));
-                              });
+                            bpList.forEach((bp, bi) => {
+                              gridRows.push(renderBPBarRow(u, bp, bi));
+                            });
                               // + Drop row for new BP entries
                               gridRows.push(
                                 <div key={u.id + '_gbp_add'} className="flex relative" style={{ height: WLR_WP }}>
                                   {dayMeta.map((dm, i) => {
                                     const ds = dm.ds;
                                     return <div key={i} className="wl-bar-cell flex-shrink-0 border-b border-r relative" style={{ width: DAY_WIDTH, height: WLR_WP, borderColor: grpBorder, backgroundColor: dm.isWE ? dBg('#e5e7eb','#1a1a2a') : dm.isHol ? dBg('#fee2e2','#4a2020') : dBg('#fafafa', '#1e1e30') }}
+                                      onContextMenu={(e) => {
+                                        e.preventDefault();
+                                        if (dm.isWE || dm.isHol) return;
+                                        setBpv2ContextMenu({ x: e.clientX, y: e.clientY, userId: u.id, date: ds, isBPDropRow: true });
+                                      }}
                                       onDragOver={isBPv2Mode ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; e.currentTarget.style.boxShadow = 'inset 0 0 0 2px #10b981'; } : undefined}
                                       onDragLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
                                       onDrop={isBPv2Mode ? (e) => {
@@ -13430,7 +13732,7 @@ const CapacityPlanner = () => {
                                   })}
                                 </div>
                               );
-                            }
+                            } // end dispoLayers.dispo
                           } else {
                             // Normal: flat
                             wpList.forEach(wp => gridRows.push(renderWPBarRow(u, wp)));
@@ -13557,11 +13859,31 @@ const CapacityPlanner = () => {
                           }
                         });
                       } else if (workloadFilter === 'fahrzeuge') {
-                        const vehicles = pResources.filter(r => r.type === 'fahrzeug').sort((a,b) => a.name.localeCompare(b.name, 'de'));
-                        // Header row
+                        const allVehicles = pResources.filter(r => r.type === 'fahrzeug').sort((a,b) => a.name.localeCompare(b.name, 'de'));
+                        // Main header row
                         gridRows.push(renderGroupRow([], '', '_fzg_hdr', { backgroundColor: dm ? '#2a2a3e' : '#dcdcdc', borderColor: grpBorder }));
-                        // Vehicle rows
-                        vehicles.forEach(r => gridRows.push(renderFahrzeugRow(r)));
+                        // Group by abteilungId
+                        const fzgGroups = {};
+                        allVehicles.forEach(v => {
+                          const gId = v.abteilungId || '_sonstige';
+                          if (!fzgGroups[gId]) fzgGroups[gId] = [];
+                          fzgGroups[gId].push(v);
+                        });
+                        const fzgSorted = Object.entries(fzgGroups).sort((a,b) => {
+                          if (a[0] === '_sonstige') return 1;
+                          if (b[0] === '_sonstige') return -1;
+                          const nameA = (divisions.find(d => d.id === a[0]) || {}).name || '';
+                          const nameB = (divisions.find(d => d.id === b[0]) || {}).name || '';
+                          return nameA.localeCompare(nameB, 'de');
+                        });
+                        fzgSorted.forEach(([gId, vehs]) => {
+                          const catKey = 'wl_fzg_' + gId;
+                          const catExp = isGroupExp(catKey);
+                          gridRows.push(renderGroupRow([], '', catKey + '_grid', { backgroundColor: dm ? '#2a2a3e' : '#e2e2e2', borderColor: grpBorder }));
+                          if (catExp) {
+                            vehs.forEach(r => { gridRows.push(renderFahrzeugRow(r)); renderVehicleCrewRows(r).forEach(cr => gridRows.push(cr)); });
+                          }
+                        });
                       }
 
                       // Bottom spacer in cockpit mode
@@ -13595,31 +13917,41 @@ const CapacityPlanner = () => {
             </div>
           </div>
           
-          <div className="dm-footer bg-white border-t px-4 py-2 flex gap-6 text-xs text-gray-600 flex-shrink-0 items-center">
+          <div className="dm-footer bg-white border-t px-4 py-1 flex flex-col gap-0.5 text-xs text-gray-600 flex-shrink-0">
             {isBPv2Mode ? (
               <React.Fragment>
-                <span className="font-semibold text-amber-600">🏭 Betriebsplanung V2</span>
-                <div className="w-px h-4 bg-gray-200" />
-                <span className="text-[9px] text-gray-400">Farbskala:</span>
-                <div className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded" style={{ backgroundColor: tierToHex('green') }} /> <span>{colorThresholds.green}–{colorThresholds.blue}%</span>
-                  <span className="w-3 h-3 rounded ml-1" style={{ backgroundColor: tierToHex('blue') }} /> <span>{colorThresholds.blue}–{colorThresholds.orange}%</span>
-                  <span className="w-3 h-3 rounded ml-1" style={{ backgroundColor: tierToHex('orange') }} /> <span>{colorThresholds.orange}–{colorThresholds.red}%</span>
-                  <span className="w-3 h-3 rounded ml-1" style={{ backgroundColor: tierToHex('red') }} /> <span>{'>'}{colorThresholds.red}%</span>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span className="font-semibold text-amber-600">🏭 Betriebsplanung V2</span>
+                  <div className="w-px h-3 bg-gray-200" />
+                  <span className="text-[9px] text-gray-400">Farbskala:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded" style={{ backgroundColor: tierToHex('green') }} /> <span>{colorThresholds.green}–{colorThresholds.blue}%</span>
+                    <span className="w-3 h-3 rounded ml-1" style={{ backgroundColor: tierToHex('blue') }} /> <span>{colorThresholds.blue}–{colorThresholds.orange}%</span>
+                    <span className="w-3 h-3 rounded ml-1" style={{ backgroundColor: tierToHex('orange') }} /> <span>{colorThresholds.orange}–{colorThresholds.red}%</span>
+                    <span className="w-3 h-3 rounded ml-1" style={{ backgroundColor: tierToHex('red') }} /> <span>{'>'}{colorThresholds.red}%</span>
+                  </div>
+                  <div className="w-px h-3 bg-gray-200" />
+                  <div className="flex items-center gap-1" title="Tastenkürzel: U"><span>🏖️</span> Urlaub <span className="text-gray-400 text-[9px]">(U)</span></div>
+                  <div className="flex items-center gap-1" title="Tastenkürzel: K"><span>🤒</span> Krank <span className="text-gray-400 text-[9px]">(K)</span></div>
+                  <div className="flex items-center gap-1" title="Tastenkürzel: M"><span>🔨</span> Montage <span className="text-gray-400 text-[9px]">(M)</span></div>
+                  <div className="flex items-center gap-1" title="Tastenkürzel: S"><span>🎓</span> Schule <span className="text-gray-400 text-[9px]">(S)</span></div>
+                  <div className="flex items-center gap-1"><span>⛔</span> Ausfall</div>
+                  <div className="flex items-center gap-1"><span>🔧</span> Wartung</div>
+                  <div className="flex items-center gap-1"><span>📝</span> Notizen</div>
+                  <div className="ml-auto text-gray-400">
+                    {dispositions.length} BP-Einträge · {users.length} MA · {resources.length} EH
+                  </div>
                 </div>
-                <div className="w-px h-4 bg-gray-200" />
-                <div className="flex items-center gap-1" title="Tastenkürzel: U"><span>🏖️</span> Urlaub <span className="text-gray-400 text-[9px]">(U)</span></div>
-                <div className="flex items-center gap-1" title="Tastenkürzel: K"><span>🤒</span> Krank <span className="text-gray-400 text-[9px]">(K)</span></div>
-                <div className="flex items-center gap-1" title="Tastenkürzel: M"><span>🔨</span> Montage <span className="text-gray-400 text-[9px]">(M)</span></div>
-                <div className="flex items-center gap-1" title="Tastenkürzel: S"><span>🎓</span> Schule <span className="text-gray-400 text-[9px]">(S)</span></div>
-                <div className="flex items-center gap-1"><span>⛔</span> Ausfall</div>
-                <div className="flex items-center gap-1"><span>🔧</span> Wartung</div>
-                <div className="flex items-center gap-1"><span>📝</span> Notizen</div>
-                <div className="flex items-center gap-1">🟢 Besetzt</div>
-                <div className="flex items-center gap-1">⚪ Unbesetzt</div>
-                <div className="flex items-center gap-1">🔴 Ausfall</div>
-                <div className="ml-auto text-gray-400">
-                  {dispositions.length} BP-Einträge · {users.length} MA · {resources.length} EH
+                <div className="flex items-center gap-4">
+                  <span className="text-[9px] text-gray-400">Quellen:</span>
+                  <div className="flex items-center gap-1"><span style={{ fontSize: 9 }}>🏭</span><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#06b6d4' }} /><span style={{ color: '#06b6d4' }}>Maschinen</span></div>
+                  <div className="flex items-center gap-1"><span style={{ fontSize: 9 }}>📐</span><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#6366f1' }} /><span style={{ color: '#6366f1' }}>Projektplanung</span></div>
+                  <div className="flex items-center gap-1"><span style={{ fontSize: 9 }}>📋</span><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#f59e0b' }} /><span style={{ color: '#f59e0b' }}>Schnellplanung</span></div>
+                  <div className="flex items-center gap-1"><span style={{ fontSize: 9 }}>✏️</span><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#10b981' }} /><span style={{ color: '#10b981' }}>Betriebsplanung</span></div>
+                  <div className="w-px h-3 bg-gray-200" />
+                  <div className="flex items-center gap-1">🟢 Besetzt</div>
+                  <div className="flex items-center gap-1">⚪ Unbesetzt</div>
+                  <div className="flex items-center gap-1">🔴 Ausfall</div>
                 </div>
               </React.Fragment>
             ) : showResourceCockpit ? (
@@ -13684,9 +14016,25 @@ const CapacityPlanner = () => {
                 style={{ left: Math.min(cm.x, window.innerWidth - 350), top: Math.min(cm.y, window.innerHeight - 450) }}>
                 <div className={`px-3 py-1.5 text-xs font-bold border-b ${dm ? 'border-[#3a3a4e] text-gray-300' : 'border-gray-100 text-gray-700'}`}>
                   {cm.isResource ? (cm.resourceName || '') : userName} · {cm.date}{selDays > 1 ? ` (${selDays} Tage)` : ''}
-                  {!cm.isResource && <span className={`ml-2 font-normal ${dm ? 'text-gray-500' : 'text-gray-400'}`}>{cm.hours?.toFixed(1) || 0}h / {cm.dailyCapacity || 8}h</span>}
+                  {!cm.isResource && !cm.isBPDropRow && <span className={`ml-2 font-normal ${dm ? 'text-gray-500' : 'text-gray-400'}`}>{cm.hours?.toFixed(1) || 0}h / {cm.dailyCapacity || 8}h</span>}
                 </div>
-                {cm.isResource ? (
+                {cm.isBPDropRow ? (
+                  <React.Fragment>
+                    <div className={`px-3 py-1 text-[10px] font-bold ${dm ? 'text-gray-500' : 'text-gray-400'}`}>Projekt zuweisen:</div>
+                    {projects.slice(0, 8).map(p => (
+                      <button key={p.id} className={`w-full px-3 py-1 text-left text-xs flex items-center gap-2 ${dm ? 'hover:bg-[#353550] text-gray-300' : 'hover:bg-gray-50 text-gray-600'}`}
+                        onClick={() => {
+                          const entry = { type: 'assignment', projectId: p.id, label: p.name, color: p.color || '#6366f1' };
+                          if (selRange && selRange.userId === cm.userId) fillBpv2Range(cm.userId, selRange.startDate, selRange.endDate, entry);
+                          else setBpv2Dispo(cm.userId, cm.date, entry);
+                          setBpv2ContextMenu(null);
+                        }}>
+                        <div className="w-2.5 h-2.5 rounded flex-shrink-0" style={{ backgroundColor: p.color || '#6366f1' }} />
+                        <span className="truncate">{p.name}</span>
+                      </button>
+                    ))}
+                  </React.Fragment>
+                ) : cm.isResource ? (
                   <React.Fragment>
                     <button className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 ${dm ? 'hover:bg-[#353550]' : 'hover:bg-gray-50'}`}
                       onClick={() => {
@@ -13967,42 +14315,58 @@ const CapacityPlanner = () => {
                   <div className={`px-3 py-1.5 text-xs font-bold border-b ${dm ? 'border-[#3a3a4e] text-gray-300' : 'border-gray-100 text-gray-700'}`}>
                     {'\u{1F69B}'} {fcm.vehicleName}{fcm.kennzeichen ? ' (' + fcm.kennzeichen + ')' : ''} · {fcm.date}
                   </div>
-                  {/* Existing drivers */}
+                  {/* Existing crew */}
                   {fcm.drivers.length > 0 && (
                     <React.Fragment>
-                      <div className={`px-3 py-1 text-[10px] font-bold ${dm ? 'text-gray-500' : 'text-gray-400'}`}>Zugewiesene Fahrer:</div>
+                      <div className={`px-3 py-1 text-[10px] font-bold ${dm ? 'text-gray-500' : 'text-gray-400'}`}>Besatzung ({fcm.drivers.length}/6):</div>
                       {fcm.drivers.map((d, di) => (
                         <div key={di} className={`px-3 py-1 text-xs flex items-center gap-2 ${dm ? 'text-gray-300' : 'text-gray-600'}`}>
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#06b6d4' }} />
+                          <span style={{ fontSize: 10 }}>{(d.role || 'fahrer') === 'fahrer' ? '\u{1F697}' : '\u{1F464}'}</span>
                           <span className="truncate flex-1">{d.userName}</span>
-                          {d.projects.length > 0 && <span className="text-[9px] truncate flex-shrink-0" style={{ color: d.projects[0].color || '#888', maxWidth: 80 }}>{'\u2192'} {d.projects[0].name}</span>}
+                          <button onClick={() => {
+                            // Toggle role: fahrer ↔ beifahrer
+                            const newDisp = dispositions.map(dp => {
+                              if (dp._resId === fcm.vehicleId && dp.date === fcm.date && dp.userId === d.userId && dp.type === 'shift') {
+                                return {...dp, role: (dp.role || 'fahrer') === 'fahrer' ? 'beifahrer' : 'fahrer'};
+                              }
+                              return dp;
+                            });
+                            saveDispositions(newDisp);
+                            const updDrivers = fcm.drivers.map(dd => dd.userId === d.userId ? {...dd, role: (d.role || 'fahrer') === 'fahrer' ? 'beifahrer' : 'fahrer'} : dd);
+                            setFahrzeugContextMenu({...fcm, drivers: updDrivers});
+                          }} className={`text-[8px] px-1 py-0.5 rounded flex-shrink-0 ${dm ? 'hover:bg-[#353550]' : 'hover:bg-gray-100'}`} style={{ color: (d.role || 'fahrer') === 'fahrer' ? '#06b6d4' : '#9ca3af' }} title="Rolle wechseln">{(d.role || 'fahrer') === 'fahrer' ? 'Fahrer' : 'Beifahrer'}</button>
                           <button onClick={() => {
                             const newDisp = dispositions.filter(dp => !(dp._resId === fcm.vehicleId && dp.date === fcm.date && dp.userId === d.userId && dp.type === 'shift'));
                             saveDispositions(newDisp);
-                            setFahrzeugContextMenu(null);
+                            const updDrivers = fcm.drivers.filter(dd => dd.userId !== d.userId);
+                            setFahrzeugContextMenu({...fcm, drivers: updDrivers});
                           }} className="text-red-400 hover:text-red-600 text-xs flex-shrink-0">{'\u2715'}</button>
                         </div>
                       ))}
                       <div className={`border-t my-1 ${dm ? 'border-[#3a3a4e]' : 'border-gray-200'}`} />
                     </React.Fragment>
                   )}
-                  {/* Assign driver */}
-                  <div className={`px-3 py-1 text-[10px] font-bold ${dm ? 'text-gray-500' : 'text-gray-400'}`}>Fahrer zuweisen:</div>
+                  {/* Assign crew */}
+                  <div className={`px-3 py-1 text-[10px] font-bold ${dm ? 'text-gray-500' : 'text-gray-400'}`}>{existingDriverIds.size >= 6 ? 'Besatzung voll (6/6)' : 'Besatzung verwalten:'}</div>
                   {availableUsers.map(u => (
                     <button key={u.id}
-                      className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 ${existingDriverIds.has(u.id) ? (dm ? 'text-cyan-400 bg-cyan-900/20' : 'text-cyan-700 bg-cyan-50') : (dm ? 'hover:bg-[#353550] text-gray-300' : 'hover:bg-gray-50 text-gray-600')}`}
+                      className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 ${existingDriverIds.has(u.id) ? (dm ? 'text-cyan-400 bg-cyan-900/20' : 'text-cyan-700 bg-cyan-50') : existingDriverIds.size >= 6 ? (dm ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 cursor-not-allowed') : (dm ? 'hover:bg-[#353550] text-gray-300' : 'hover:bg-gray-50 text-gray-600')}`}
                       onClick={() => {
                         if (existingDriverIds.has(u.id)) {
-                          // Remove this driver
+                          // Remove this crew member
                           const newDisp = dispositions.filter(d => !(d._resId === fcm.vehicleId && d.date === fcm.date && d.userId === u.id && d.type === 'shift'));
                           saveDispositions(newDisp);
+                          const updDrivers = fcm.drivers.filter(dd => dd.userId !== u.id);
+                          setFahrzeugContextMenu({...fcm, drivers: updDrivers});
                         } else {
-                          // Replace: remove ALL existing drivers for this vehicle+date, then add new one
-                          const cleaned = dispositions.filter(d => !(d._resId === fcm.vehicleId && d.date === fcm.date && d.type === 'shift'));
-                          const entry = { userId: u.id, date: fcm.date, type: 'shift', shift: fcmShift.key, label: fcm.vehicleName, color: fcmShift.color, _resId: fcm.vehicleId };
-                          saveDispositions([...cleaned, entry]);
+                          // Add as crew member (max 6)
+                          if (existingDriverIds.size >= 6) return;
+                          const role = existingDriverIds.size === 0 ? 'fahrer' : 'beifahrer';
+                          const entry = { userId: u.id, date: fcm.date, type: 'shift', shift: fcmShift.key, label: fcm.vehicleName, color: fcmShift.color, _resId: fcm.vehicleId, role };
+                          saveDispositions([...dispositions, entry]);
+                          const updDrivers = [...fcm.drivers, { userId: u.id, userName: u.name, role, projects: [] }];
+                          setFahrzeugContextMenu({...fcm, drivers: updDrivers});
                         }
-                        setFahrzeugContextMenu(null);
                       }}>
                       <span className="text-[10px]">{existingDriverIds.has(u.id) ? '\u2713' : '\u{1F464}'}</span>
                       <span className="truncate">{u.name}</span>
