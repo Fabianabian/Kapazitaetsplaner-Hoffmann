@@ -10987,6 +10987,7 @@ const CapacityPlanner = () => {
                                       <TreeLines level={itemLevel} isLast={isLastSP} parentLines={wpParentLines} />
                                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                         <span className="flex-shrink-0" style={{ fontSize: 9 }}>📋</span>
+                                        <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: pp.color || '#f59e0b' }} />
                                         <span className="truncate" style={{ fontStyle: 'italic' }}>{pp.name}</span>
                                         <span className="wl-t-tiny ml-auto flex-shrink-0" style={{ color: '#94a3b8' }}>{Math.round(pp.totalHours)}h</span>
                                       </div>
